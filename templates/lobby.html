@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Molecular Chess - Lobby</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 1rem 0;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 1200px;
+            width: 95%;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 0.5rem;
+            font-size: 2rem;
+            font-weight: 300;
+        }
+
+        .lobby-id {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            display: inline-block;
+            font-family: monospace;
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+        }
+
+        .nav-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .nav-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1rem;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .lobby-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .lobby-sidebar {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 1.5rem;
+            height: fit-content;
+        }
+
+        .player-section {
+            margin-bottom: 2rem;
+        }
+
+        .player-section h3 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .player-list {
+            list-style: none;
+        }
+
+        .player-item {
+            background: white;
+            padding: 0.8rem;
+            margin-bottom: 0.5rem;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .player-item.spectator {
+            border-left-color: #f093fb;
+            opacity: 0.8;
+        }
+
+        .player-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+
+        .player-info {
+            flex: 1;
+        }
+
+        .player-name {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .player-role {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .game-status {
+            background: white;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .status-waiting {
+            background: #ffc107;
+        }
+
+        .status-ready {
+            background: #28a745;
+        }
+
+        .status-playing {
+            background: #007bff;
+        }
+
+        .game-board-container {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .game-board {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .node {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: #fff;
+            border: 2px solid #333;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            z-index: 10;
+        }
+
+        .node:hover {
+            background: #e8c39e;
+            transform: scale(1.2);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .node.selected {
+            background: #ff6b6b;
+            border-color: #d63031;
+        }
+
+        .node.legal-move {
+            background: #4caf50;
+            border-color: #2e7d32;
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .strand {
+            position: absolute;
+            background: #333;
+            z-index: 5;
+        }
+
+        .strand.ring {
+            border: 2px solid #333;
+            border-radius: 50%;
+            background: transparent;
+        }
+
+        .game-controls {
+            margin-top: 1rem;
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn.secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .share-link {
+            background: #f8f9fa;
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        .share-link input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            margin-bottom: 0.5rem;
+        }
+
+        .copy-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .copy-btn:hover {
+            background: #5a6fd8;
+        }
+
+        @media (max-width: 768px) {
+            .lobby-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .game-board {
+                width: 100%;
+                max-width: 400px;
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">♔♛</div>
+            <h1>Game Lobby</h1>
+            <div class="lobby-id" id="lobby-id">{{ lobby_id }}</div>
+        </div>
+
+        <div class="nav-bar">
+            <a href="/" class="nav-btn">← Back to Home</a>
+            <a href="/rules" class="nav-btn">📖 Rules</a>
+        </div>
+
+        <div class="lobby-content">
+            <div class="lobby-sidebar">
+                <div class="game-status">
+                    <span class="status-indicator status-waiting" id="status-indicator"></span>
+                    <span id="status-text">Waiting for players...</span>
+                </div>
+
+                <div class="player-section">
+                    <h3>Players (0/2)</h3>
+                    <ul class="player-list" id="player-list">
+                        <li class="player-item">Waiting for players to join...</li>
+                    </ul>
+                </div>
+
+                <div class="player-section">
+                    <h3>Spectators</h3>
+                    <ul class="player-list" id="spectator-list">
+                        <li class="player-item">No spectators</li>
+                    </ul>
+                </div>
+
+                <div class="share-link">
+                    <h4>Share this link:</h4>
+                    <input type="text" id="share-url" readonly>
+                    <button class="copy-btn" onclick="copyShareLink()">Copy Link</button>
+                </div>
+            </div>
+
+            <div class="game-board-container">
+                <div class="game-board" id="game-board">
+                    <!-- Game board will be created by JavaScript -->
+                </div>
+                
+                <div class="game-controls">
+                    <button class="btn" id="start-game-btn" disabled>Start Game</button>
+                    <button class="btn secondary" onclick="resetBoard()">Reset Board</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let playerId = null;
+        let playerRole = null;
+        let gameBoard = null;
+        let lobbyState = null;
+
+        // Generate unique player ID
+        function generatePlayerId() {
+            return 'player_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Initialize lobby
+        async function initializeLobby() {
+            playerId = generatePlayerId();
+            const lobbyId = document.getElementById('lobby-id').textContent;
+            
+            // Set share URL
+            const shareUrl = window.location.origin + '/lobby/' + lobbyId;
+            document.getElementById('share-url').value = shareUrl;
+
+            // Join lobby
+            try {
+                const response = await fetch(`/api/lobby/${lobbyId}/join`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        player_id: playerId,
+                        player_name: `Player ${playerId.slice(-4)}`
+                    })
+                });
+
+                const data = await response.json();
+                playerRole = data.role;
+                lobbyState = data.lobby_info;
+                
+                updateLobbyDisplay();
+                initializeGameBoard();
+                
+                // Start polling for updates
+                startPolling();
+            } catch (error) {
+                console.error('Failed to join lobby:', error);
+            }
+        }
+
+        // Update lobby display
+        function updateLobbyDisplay() {
+            if (!lobbyState) return;
+
+            // Update player count
+            const playerCount = lobbyState.players.length;
+            document.querySelector('.player-section h3').textContent = `Players (${playerCount}/2)`;
+
+            // Update player list
+            const playerList = document.getElementById('player-list');
+            playerList.innerHTML = '';
+            
+            if (lobbyState.players.length === 0) {
+                playerList.innerHTML = '<li class="player-item">Waiting for players to join...</li>';
+            } else {
+                lobbyState.players.forEach(player => {
+                    const li = document.createElement('li');
+                    li.className = 'player-item';
+                    li.innerHTML = `
+                        <div class="player-avatar">${player.name.slice(0, 2).toUpperCase()}</div>
+                        <div class="player-info">
+                            <div class="player-name">${player.name}</div>
+                            <div class="player-role">${player.color} player</div>
+                        </div>
+                    `;
+                    playerList.appendChild(li);
+                });
+            }
+
+            // Update spectator list
+            const spectatorList = document.getElementById('spectator-list');
+            spectatorList.innerHTML = '';
+            
+            if (lobbyState.spectators.length === 0) {
+                spectatorList.innerHTML = '<li class="player-item">No spectators</li>';
+            } else {
+                lobbyState.spectators.forEach(spectator => {
+                    const li = document.createElement('li');
+                    li.className = 'player-item spectator';
+                    li.innerHTML = `
+                        <div class="player-avatar">👁</div>
+                        <div class="player-info">
+                            <div class="player-name">${spectator.name}</div>
+                            <div class="player-role">Spectator</div>
+                        </div>
+                    `;
+                    spectatorList.appendChild(li);
+                });
+            }
+
+            // Update status
+            const statusIndicator = document.getElementById('status-indicator');
+            const statusText = document.getElementById('status-text');
+            const startBtn = document.getElementById('start-game-btn');
+
+            if (lobbyState.game_state.game_started) {
+                // Game is already started
+                statusIndicator.className = 'status-indicator status-playing';
+                statusText.textContent = 'Game started! ' + 
+                    (lobbyState.game_state.current_turn === 'red' ? 'Red' : 'Blue') + ' to move.';
+                startBtn.disabled = true;
+            } else if (lobbyState.can_start) {
+                // Ready to start but not started yet
+                statusIndicator.className = 'status-indicator status-ready';
+                statusText.textContent = 'Ready to start!';
+                startBtn.disabled = false;
+            } else {
+                // Waiting for players
+                statusIndicator.className = 'status-indicator status-waiting';
+                statusText.textContent = `Waiting for players... (${playerCount}/2)`;
+                startBtn.disabled = true;
+            }
+        }
+
+        // Poll for lobby updates
+        function startPolling() {
+            setInterval(async () => {
+                try {
+                    const lobbyId = document.getElementById('lobby-id').textContent;
+                    const response = await fetch(`/api/lobby/${lobbyId}/state`);
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        console.error('Lobby error:', data.error);
+                        return;
+                    }
+
+                    // Check if game state has changed
+                    const gameStateChanged = !lobbyState || 
+                        lobbyState.game_state.game_started !== data.game_state.game_started ||
+                        JSON.stringify(lobbyState.game_state.board) !== JSON.stringify(data.game_state.board);
+
+                    lobbyState = data;
+                    updateLobbyDisplay();
+                    
+                    // Update game board if game state changed
+                    if (gameBoard && data.game_state && gameStateChanged) {
+                        if (data.game_state.game_started && data.game_state.board) {
+                            gameBoard.updateBoardWithPieces(data.game_state.board);
+                            
+                            // Update UI to reflect game has started
+                            document.getElementById('status-text').textContent = 'Game started! ' + 
+                                (data.game_state.current_turn === 'red' ? 'Red' : 'Blue') + ' to move.';
+                            document.getElementById('status-indicator').className = 'status-indicator status-playing';
+                            document.getElementById('start-game-btn').disabled = true;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to poll lobby state:', error);
+                }
+            }, 2000); // Poll every 2 seconds
+        }
+
+        // Copy share link
+        function copyShareLink() {
+            const shareUrl = document.getElementById('share-url');
+            shareUrl.select();
+            document.execCommand('copy');
+            
+            const copyBtn = document.querySelector('.copy-btn');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+            }, 2000);
+        }
+
+        // Game board class
+        class MolecularBoard {
+            constructor() {
+                this.board = document.getElementById('game-board');
+                this.nodes = [];
+                this.selectedNode = null;
+                this.centerX = 250;
+                this.centerY = 250;
+                this.initializeBoard();
+            }
+
+            initializeBoard() {
+                this.board.innerHTML = '';
+                this.nodes = [];
+                
+                // Create center nodes (4 nodes in a square)
+                const centerOffset = 25;
+                const centerPositions = [
+                    {x: this.centerX - centerOffset, y: this.centerY - centerOffset},
+                    {x: this.centerX + centerOffset, y: this.centerY - centerOffset},
+                    {x: this.centerX - centerOffset, y: this.centerY + centerOffset},
+                    {x: this.centerX + centerOffset, y: this.centerY + centerOffset}
+                ];
+
+                centerPositions.forEach((pos, index) => {
+                    this.createNode(pos.x, pos.y, `C${index}`, 'center');
+                });
+
+                // Create concentric rings
+                const ringRadii = [70, 140, 210];
+                ringRadii.forEach((radius, ringIndex) => {
+                    this.createRing(radius, ringIndex + 1);
+                });
+
+                // Create connecting strands
+                this.createStrands();
+            }
+
+            createNode(x, y, id, type) {
+                const node = document.createElement('div');
+                node.className = 'node';
+                node.style.left = (x - 9) + 'px';
+                node.style.top = (y - 9) + 'px';
+                node.setAttribute('data-id', id);
+                node.setAttribute('data-type', type);
+                node.setAttribute('data-x', x);
+                node.setAttribute('data-y', y);
+                node.textContent = id;
+                node.addEventListener('click', (e) => this.handleNodeClick(e));
+                
+                this.board.appendChild(node);
+                this.nodes.push({id, x, y, type, element: node});
+            }
+
+            createRing(radius, ringIndex) {
+                const nodesPerRing = 16;
+                for (let i = 0; i < nodesPerRing; i++) {
+                    const angle = (i * 2 * Math.PI) / nodesPerRing;
+                    const x = this.centerX + radius * Math.cos(angle);
+                    const y = this.centerY + radius * Math.sin(angle);
+                    const id = `R${ringIndex}N${i}`;
+                    this.createNode(x, y, id, `ring${ringIndex}`);
+                }
+            }
+
+            createStrands() {
+                // Ring strands (circular)
+                const ringRadii = [70, 140, 210];
+                ringRadii.forEach((radius, index) => {
+                    const ringStrand = document.createElement('div');
+                    ringStrand.className = 'strand ring';
+                    ringStrand.style.left = (this.centerX - radius) + 'px';
+                    ringStrand.style.top = (this.centerY - radius) + 'px';
+                    ringStrand.style.width = (radius * 2) + 'px';
+                    ringStrand.style.height = (radius * 2) + 'px';
+                    this.board.appendChild(ringStrand);
+                });
+
+                // Additional connecting strands through specific nodes
+                this.createNodeConnections();
+            }
+
+            createNodeConnections() {
+                // Create SVG for curved strands
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('width', '500');
+                svg.setAttribute('height', '500');
+                svg.style.position = 'absolute';
+                svg.style.top = '0';
+                svg.style.left = '0';
+                svg.style.zIndex = '5';
+                this.board.appendChild(svg);
+
+                // Vertical strand 1: R3N11 -> R2N11 -> R1N11 -> C0 -> C2 -> R1N5 -> R2N5 -> R3N5
+                this.createCurvedStrand(svg, [
+                    'R3N11', 'R2N11', 'R1N11', 'C0', 'C2', 'R1N5', 'R2N5', 'R3N5'
+                ], 'vertical');
+
+                // Vertical strand 2 (mirrored): R3N13 -> R2N13 -> R1N13 -> C1 -> C3 -> R1N3 -> R2N3 -> R3N3
+                this.createCurvedStrand(svg, [
+                    'R3N13', 'R2N13', 'R1N13', 'C1', 'C3', 'R1N3', 'R2N3', 'R3N3'
+                ], 'vertical');
+
+                // Horizontal strand 1: R3N7 -> R2N7 -> R1N7 -> C2 -> C3 -> R1N1 -> R2N1 -> R3N1
+                this.createCurvedStrand(svg, [
+                    'R3N7', 'R2N7', 'R1N7', 'C2', 'C3', 'R1N1', 'R2N1', 'R3N1'
+                ], 'horizontal');
+
+                // Horizontal strand 2 (mirrored): R3N9 -> R2N9 -> R1N9 -> C0 -> C1 -> R1N15 -> R2N15 -> R3N15
+                this.createCurvedStrand(svg, [
+                    'R3N9', 'R2N9', 'R1N9', 'C0', 'C1', 'R1N15', 'R2N15', 'R3N15'
+                ], 'horizontal');
+            }
+
+            createCurvedStrand(svg, nodeIds, direction) {
+                const nodes = nodeIds.map(id => this.nodes.find(n => n.id === id)).filter(n => n);
+                
+                if (nodes.length < 2) return;
+
+                // Create path through node centers
+                let pathData = '';
+                
+                nodes.forEach((node, index) => {
+                    const x = node.x;
+                    const y = node.y;
+                    
+                    if (index === 0) {
+                        pathData += `M ${x} ${y}`;
+                    } else {
+                        // Calculate control points for smooth curves
+                        const prevNode = nodes[index - 1];
+                        const nextNode = nodes[index + 1];
+                        
+                        if (nextNode) {
+                            // Use quadratic curve for smooth transitions
+                            const midX = (x + prevNode.x) / 2;
+                            const midY = (y + prevNode.y) / 2;
+                            pathData += ` Q ${midX} ${midY} ${x} ${y}`;
+                        } else {
+                            // Last node, just line to it
+                            pathData += ` L ${x} ${y}`;
+                        }
+                    }
+                });
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathData);
+                path.setAttribute('stroke', '#333');
+                path.setAttribute('stroke-width', '2');
+                path.setAttribute('fill', 'none');
+                path.setAttribute('stroke-linecap', 'round');
+                path.setAttribute('stroke-linejoin', 'round');
+                
+                svg.appendChild(path);
+            }
+
+            handleNodeClick(event) {
+                const node = event.target;
+                const nodeId = node.getAttribute('data-id');
+                
+                // Only allow moves if player is a player (not spectator) and it's their turn
+                if (playerRole !== 'player') {
+                    document.getElementById('status-text').textContent = 'Spectators cannot make moves';
+                    return;
+                }
+                
+                // Clear previous legal move indicators
+                this.clearLegalMoveIndicators();
+                
+                // Remove previous selection
+                if (this.selectedNode) {
+                    this.selectedNode.classList.remove('selected');
+                }
+                
+                // Select new node
+                node.classList.add('selected');
+                this.selectedNode = node;
+                
+                // Get legal moves for this piece
+                this.getLegalMoves(nodeId);
+            }
+
+            async getLegalMoves(nodeId) {
+                try {
+                    const lobbyId = document.getElementById('lobby-id').textContent;
+                    const response = await fetch(`/api/lobby/${lobbyId}/legal-moves/${nodeId}`);
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        document.getElementById('status-text').textContent = 'Error getting legal moves: ' + data.error;
+                        return;
+                    }
+                    
+                    if (data.legal_moves.length > 0) {
+                        this.highlightLegalMoves(data.legal_moves);
+                        document.getElementById('status-text').textContent = 
+                            `Legal moves for ${nodeId}: ${data.legal_moves.join(', ')}`;
+                    } else {
+                        document.getElementById('status-text').textContent = 
+                            `No legal moves for ${nodeId}`;
+                    }
+                } catch (error) {
+                    console.error('Failed to get legal moves:', error);
+                    document.getElementById('status-text').textContent = 'Failed to get legal moves';
+                }
+            }
+
+            highlightLegalMoves(legalMoves) {
+                legalMoves.forEach(nodeId => {
+                    const node = this.nodes.find(n => n.id === nodeId);
+                    if (node) {
+                        node.element.classList.add('legal-move');
+                    }
+                });
+            }
+
+            clearLegalMoveIndicators() {
+                this.nodes.forEach(node => {
+                    node.element.classList.remove('legal-move');
+                });
+            }
+
+            updateBoardWithPieces(boardState) {
+                // Clear all existing pieces
+                this.nodes.forEach(node => {
+                    node.element.textContent = node.id;
+                    node.element.style.background = '#fff';
+                    node.element.style.borderColor = '#333';
+                });
+
+                // Place pieces according to board state
+                for (const [nodeId, pieceName] of Object.entries(boardState)) {
+                    const node = this.nodes.find(n => n.id === nodeId);
+                    if (node) {
+                        // Get the piece symbol based on piece name
+                        const pieceSymbol = this.getPieceSymbol(pieceName);
+                        if (pieceSymbol) {
+                            node.element.textContent = pieceSymbol;
+                            
+                            // Color the node based on piece color
+                            const isRed = pieceName.startsWith('red_');
+                            node.element.style.background = isRed ? '#ffebee' : '#e3f2fd';
+                            node.element.style.color = isRed ? '#c62828' : '#1565c0';
+                            node.element.style.borderColor = isRed ? '#ef5350' : '#42a5f5';
+                        }
+                    }
+                }
+            }
+
+            getPieceSymbol(pieceName) {
+                // Map piece names to Unicode symbols
+                const pieceSymbols = {
+                    'red_matron mother': '♔',
+                    'red_wizard': '♕',
+                    'red_priestess': '♗',
+                    'red_weaponmaster': '♘',
+                    'red_orc_0': '♙',
+                    'red_orc_1': '♙',
+                    'red_orc_2': '♙',
+                    'red_orc_3': '♙',
+                    'red_orc_4': '♙',
+                    'red_orc_5': '♙',
+                    'red_orc_6': '♙',
+                    'red_orc_7': '♙',
+                    'blue_matron mother': '♚',
+                    'blue_wizard': '♛',
+                    'blue_priestess': '♝',
+                    'blue_weaponmaster': '♞',
+                    'blue_orc_0': '♟',
+                    'blue_orc_1': '♟',
+                    'blue_orc_2': '♟',
+                    'blue_orc_3': '♟',
+                    'blue_orc_4': '♟',
+                    'blue_orc_5': '♟',
+                    'blue_orc_6': '♟',
+                    'blue_orc_7': '♟'
+                };
+                
+                return pieceSymbols[pieceName] || pieceName;
+            }
+        }
+
+        function initializeGameBoard() {
+            gameBoard = new MolecularBoard();
+        }
+
+        function resetBoard() {
+            if (gameBoard) {
+                gameBoard.initializeBoard();
+            }
+        }
+
+        // Start game function
+        document.getElementById('start-game-btn').addEventListener('click', async function() {
+            if (lobbyState && lobbyState.can_start) {
+                try {
+                    const lobbyId = document.getElementById('lobby-id').textContent;
+                    
+                    // Example piece mapping - you can modify this as needed
+                    const pieceMapping = {
+                        // White pieces
+                        'red_matron mother': 'R3N12',
+                        'red_wizard': 'R2N13', 
+                        'red_priestess': 'R2N12',
+                        'red_weaponmaster': 'R2N11',
+                        'red_orc_0': 'R3N11',
+                        'red_orc_1': 'R3N10',
+                        'red_orc_2': 'R3N13',
+                        'red_orc_3': 'R3N14',
+                        'red_orc_4': 'R1N11',
+                        'red_orc_5': 'R2N10',
+                        'red_orc_6': 'R2N14',
+                        'red_orc_7': 'R1N13',
+
+
+                        
+                        // Black pieces
+                        'blue_matron mother': 'R3N4',
+                        'blue_wizard': 'R2N5', 
+                        'blue_priestess': 'R2N4',
+                        'blue_weaponmaster': 'R2N3',
+                        'blue_orc_0': 'R3N6',
+                        'blue_orc_1': 'R3N5',
+                        'blue_orc_2': 'R3N3',
+                        'blue_orc_3': 'R3N2',
+                        'blue_orc_4': 'R2N6',
+                        'blue_orc_5': 'R2N2',
+                        'blue_orc_6': 'R1N3',
+                        'blue_orc_7': 'R1N5'
+                    };
+                    
+                    const response = await fetch(`/api/lobby/${lobbyId}/start-game`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            piece_mapping: pieceMapping
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        document.getElementById('status-text').textContent = 'Game started! Red to move.';
+                        document.getElementById('status-indicator').className = 'status-indicator status-playing';
+                        document.getElementById('start-game-btn').disabled = true;
+                        
+                        // Update the game board with pieces
+                        if (gameBoard) {
+                            gameBoard.updateBoardWithPieces(data.game_state.board);
+                        }
+                        
+                        // Update lobby state
+                        lobbyState = data.game_state;
+                    } else {
+                        document.getElementById('status-text').textContent = 'Failed to start game: ' + (data.error || 'Unknown error');
+                    }
+                } catch (error) {
+                    console.error('Failed to start game:', error);
+                    document.getElementById('status-text').textContent = 'Failed to start game. Please try again.';
+                }
+            }
+        });
+
+        // Handle page unload
+        window.addEventListener('beforeunload', async () => {
+            if (playerId) {
+                const lobbyId = document.getElementById('lobby-id').textContent;
+                try {
+                    await fetch(`/api/lobby/${lobbyId}/leave`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            player_id: playerId
+                        })
+                    });
+                } catch (error) {
+                    console.error('Failed to leave lobby:', error);
+                }
+            }
+        });
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initializeLobby);
+    </script>
+</body>
+</html> 
