@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Molecular Chess - Lobby</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <style>
         * {
             margin: 0;
@@ -191,6 +192,53 @@
             border-radius: 15px;
             padding: 1.5rem;
             text-align: center;
+            position: relative;
+        }
+
+        .captured-pieces {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: white;
+            border-radius: 10px;
+            padding: 1rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            min-width: 150px;
+        }
+
+        .captured-pieces h4 {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .captured-pieces-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+        }
+
+        .captured-piece {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            border: 2px solid #ddd;
+        }
+
+        .captured-piece.red {
+            background: #ffebee;
+            color: #c62828;
+            border-color: #ef5350;
+        }
+
+        .captured-piece.blue {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-color: #42a5f5;
         }
 
         .game-board {
@@ -375,6 +423,17 @@
             </div>
 
             <div class="game-board-container">
+                <div class="captured-pieces">
+                    <h4>Captured by Red</h4>
+                    <div class="captured-pieces-list" id="red-captured">
+                        <!-- Red's captured pieces will be displayed here -->
+                    </div>
+                    <h4>Captured by Blue</h4>
+                    <div class="captured-pieces-list" id="blue-captured">
+                        <!-- Blue's captured pieces will be displayed here -->
+                    </div>
+                </div>
+                
                 <div class="game-board" id="game-board">
                     <!-- Game board will be created by JavaScript -->
                 </div>
@@ -392,6 +451,7 @@
         let playerRole = null;
         let gameBoard = null;
         let lobbyState = null;
+        let socket = null;
 
         // Generate unique player ID
         function generatePlayerId() {
@@ -406,6 +466,9 @@
             // Set share URL
             const shareUrl = window.location.origin + '/lobby/' + lobbyId;
             document.getElementById('share-url').value = shareUrl;
+
+            // Initialize WebSocket connection
+            initializeWebSocket(lobbyId);
 
             // Join lobby
             try {
@@ -426,11 +489,108 @@
                 
                 updateLobbyDisplay();
                 initializeGameBoard();
-                
-                // Start polling for updates
-                startPolling();
             } catch (error) {
                 console.error('Failed to join lobby:', error);
+            }
+        }
+
+        // Initialize WebSocket connection
+        function initializeWebSocket(lobbyId) {
+            socket = io();
+            
+            // Handle connection events
+            socket.on('connect', function() {
+                console.log('WebSocket connected');
+                
+                // Join the lobby room after connection is established
+                socket.emit('join_lobby', {
+                    lobby_id: lobbyId,
+                    player_id: playerId
+                });
+            });
+            
+            socket.on('disconnect', function() {
+                console.log('WebSocket disconnected');
+            });
+            
+            // Listen for lobby updates
+            socket.on('lobby_update', function(data) {
+                console.log('WebSocket update received:', data);
+                handleLobbyUpdate(data);
+            });
+        }
+
+        // Handle lobby updates from WebSocket
+        function handleLobbyUpdate(data) {
+            const { event_type, lobby_info, data: eventData } = data;
+            
+            // Update local state
+            lobbyState = lobby_info;
+            
+            // Update display
+            updateLobbyDisplay();
+            
+            // Update captured pieces display
+            updateCapturedPieces();
+            
+            // Handle specific events
+            switch (event_type) {
+                case 'game_started':
+                    console.log('Game started via WebSocket');
+                    if (gameBoard && lobby_info.game_state.board) {
+                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
+                    }
+                    document.getElementById('status-text').textContent = 'Game started! ' + 
+                        (lobby_info.game_state.current_turn === 'red' ? 'Red' : 'Blue') + ' to move.';
+                    document.getElementById('status-indicator').className = 'status-indicator status-playing';
+                    document.getElementById('start-game-btn').disabled = true;
+                    break;
+                    
+                case 'piece_moved':
+                    console.log('Piece moved via WebSocket');
+                    if (gameBoard && lobby_info.game_state.board) {
+                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
+                    }
+                    
+                    // Update status with move information
+                    const moveInfo = lobby_info.game_state.last_move;
+                    if (moveInfo) {
+                        let statusText = `${moveInfo.player} moved ${moveInfo.piece} from ${moveInfo.from} to ${moveInfo.to}`;
+                        if (moveInfo.captured) {
+                            statusText += ` (captured ${moveInfo.captured})`;
+                        }
+                        statusText += `. ${lobby_info.game_state.current_turn} to move.`;
+                        document.getElementById('status-text').textContent = statusText;
+                    }
+                    
+                    // Clear any current selection since it's not our turn
+                    gameBoard.clearLegalMoveIndicators();
+                    if (gameBoard.selectedNode) {
+                        gameBoard.selectedNode.classList.remove('selected');
+                        gameBoard.selectedNode = null;
+                    }
+                    break;
+                    
+                case 'player_joined':
+                    console.log('Player joined via WebSocket:', eventData);
+                    // Force update the lobby display to show the new player
+                    updateLobbyDisplay();
+                    break;
+                    
+                case 'player_left':
+                    console.log('Player left via WebSocket:', eventData);
+                    // Force update the lobby display to reflect the player leaving
+                    updateLobbyDisplay();
+                    break;
+                    
+                case 'joined_lobby':
+                    console.log('Joined lobby via WebSocket:', lobby_info);
+                    // Update the display with the current lobby state
+                    updateLobbyDisplay();
+                    break;
+                    
+                default:
+                    console.log('Unknown event type:', event_type);
             }
         }
 
@@ -508,43 +668,36 @@
             }
         }
 
-        // Poll for lobby updates
-        function startPolling() {
-            setInterval(async () => {
-                try {
-                    const lobbyId = document.getElementById('lobby-id').textContent;
-                    const response = await fetch(`/api/lobby/${lobbyId}/state`);
-                    const data = await response.json();
-                    
-                    if (data.error) {
-                        console.error('Lobby error:', data.error);
-                        return;
-                    }
 
-                    // Check if game state has changed
-                    const gameStateChanged = !lobbyState || 
-                        lobbyState.game_state.game_started !== data.game_state.game_started ||
-                        JSON.stringify(lobbyState.game_state.board) !== JSON.stringify(data.game_state.board);
 
-                    lobbyState = data;
-                    updateLobbyDisplay();
-                    
-                    // Update game board if game state changed
-                    if (gameBoard && data.game_state && gameStateChanged) {
-                        if (data.game_state.game_started && data.game_state.board) {
-                            gameBoard.updateBoardWithPieces(data.game_state.board);
-                            
-                            // Update UI to reflect game has started
-                            document.getElementById('status-text').textContent = 'Game started! ' + 
-                                (data.game_state.current_turn === 'red' ? 'Red' : 'Blue') + ' to move.';
-                            document.getElementById('status-indicator').className = 'status-indicator status-playing';
-                            document.getElementById('start-game-btn').disabled = true;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to poll lobby state:', error);
-                }
-            }, 2000); // Poll every 2 seconds
+        // Update captured pieces display
+        function updateCapturedPieces() {
+            if (!lobbyState || !lobbyState.game_state.captured_pieces) return;
+            
+            const redCaptured = document.getElementById('red-captured');
+            const blueCaptured = document.getElementById('blue-captured');
+            
+            // Clear existing displays
+            redCaptured.innerHTML = '';
+            blueCaptured.innerHTML = '';
+            
+            // Display red's captured pieces
+            lobbyState.game_state.captured_pieces.red.forEach(pieceName => {
+                const pieceElement = document.createElement('div');
+                pieceElement.className = 'captured-piece blue'; // Blue pieces captured by red
+                pieceElement.textContent = getPieceSymbol(pieceName);
+                pieceElement.title = pieceName;
+                redCaptured.appendChild(pieceElement);
+            });
+            
+            // Display blue's captured pieces
+            lobbyState.game_state.captured_pieces.blue.forEach(pieceName => {
+                const pieceElement = document.createElement('div');
+                pieceElement.className = 'captured-piece red'; // Red pieces captured by blue
+                pieceElement.textContent = getPieceSymbol(pieceName);
+                pieceElement.title = pieceName;
+                blueCaptured.appendChild(pieceElement);
+            });
         }
 
         // Copy share link
@@ -727,6 +880,12 @@
                     return;
                 }
                 
+                // Check if this is a legal move for a previously selected piece
+                if (this.selectedNode && node.classList.contains('legal-move')) {
+                    this.executeMove(this.selectedNode.getAttribute('data-id'), nodeId);
+                    return;
+                }
+                
                 // Clear previous legal move indicators
                 this.clearLegalMoveIndicators();
                 
@@ -741,6 +900,58 @@
                 
                 // Get legal moves for this piece
                 this.getLegalMoves(nodeId);
+            }
+
+            async executeMove(fromNode, toNode) {
+                try {
+                    const lobbyId = document.getElementById('lobby-id').textContent;
+                    console.log('Executing move:', { fromNode, toNode, playerId });
+                    
+                    const response = await fetch(`/api/lobby/${lobbyId}/move`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            from_node: fromNode,
+                            to_node: toNode,
+                            player_id: playerId
+                        })
+                    });
+
+                    const data = await response.json();
+                    console.log('Move response:', data);
+                    
+                    if (data.success) {
+                        // Update the board with the new state
+                        this.updateBoardWithPieces(data.game_state.board);
+                        
+                        // Clear selection and legal moves
+                        this.clearLegalMoveIndicators();
+                        if (this.selectedNode) {
+                            this.selectedNode.classList.remove('selected');
+                            this.selectedNode = null;
+                        }
+                        
+                        // Update status
+                        const moveInfo = data.move;
+                        let statusText = `${moveInfo.player} moved ${moveInfo.piece} from ${moveInfo.from} to ${moveInfo.to}`;
+                        if (moveInfo.captured) {
+                            statusText += ` (captured ${moveInfo.captured})`;
+                        }
+                        statusText += `. ${data.game_state.current_turn} to move.`;
+                        
+                        document.getElementById('status-text').textContent = statusText;
+                        
+                        // Update local lobby state to match server
+                        lobbyState = data.game_state;
+                    } else {
+                        document.getElementById('status-text').textContent = 'Move failed: ' + (data.error || 'Unknown error');
+                    }
+                } catch (error) {
+                    console.error('Failed to execute move:', error);
+                    document.getElementById('status-text').textContent = 'Failed to execute move. Please try again.';
+                }
             }
 
             async getLegalMoves(nodeId) {
@@ -843,6 +1054,39 @@
             }
         }
 
+        // Global function to get piece symbols (used by captured pieces display)
+        function getPieceSymbol(pieceName) {
+            // Map piece names to Unicode symbols
+            const pieceSymbols = {
+                'red_matron mother': '♔',
+                'red_wizard': '♕',
+                'red_priestess': '♗',
+                'red_weaponmaster': '♘',
+                'red_orc_0': '♙',
+                'red_orc_1': '♙',
+                'red_orc_2': '♙',
+                'red_orc_3': '♙',
+                'red_orc_4': '♙',
+                'red_orc_5': '♙',
+                'red_orc_6': '♙',
+                'red_orc_7': '♙',
+                'blue_matron mother': '♚',
+                'blue_wizard': '♛',
+                'blue_priestess': '♝',
+                'blue_weaponmaster': '♞',
+                'blue_orc_0': '♟',
+                'blue_orc_1': '♟',
+                'blue_orc_2': '♟',
+                'blue_orc_3': '♟',
+                'blue_orc_4': '♟',
+                'blue_orc_5': '♟',
+                'blue_orc_6': '♟',
+                'blue_orc_7': '♟'
+            };
+            
+            return pieceSymbols[pieceName] || pieceName;
+        }
+
         function initializeGameBoard() {
             gameBoard = new MolecularBoard();
         }
@@ -928,8 +1172,16 @@
 
         // Handle page unload
         window.addEventListener('beforeunload', async () => {
-            if (playerId) {
+            if (playerId && socket) {
                 const lobbyId = document.getElementById('lobby-id').textContent;
+                
+                // Leave the WebSocket room
+                socket.emit('leave_lobby', {
+                    lobby_id: lobbyId,
+                    player_id: playerId
+                });
+                
+                // Also call the API to ensure cleanup
                 try {
                     await fetch(`/api/lobby/${lobbyId}/leave`, {
                         method: 'POST',

@@ -1,11 +1,14 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import uuid
 import json
 from datetime import datetime
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key-here'
 CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # In-memory storage for lobbies and game states
 lobbies = {}
@@ -140,6 +143,19 @@ def get_legal_moves(piece_name, node_id, board_state, current_color):
                 legal_moves.append(neighbor_id)
         return legal_moves
 
+def notify_lobby_update(lobby_id, event_type, data=None):
+    """Send WebSocket notification to all players in a lobby."""
+    if lobby_id in lobbies:
+        lobby = lobbies[lobby_id]
+        notification = {
+            'event_type': event_type,
+            'lobby_info': lobby.get_lobby_info(),
+            'data': data
+        }
+        # Convert datetime objects to strings for JSON serialization
+        notification = json.loads(json.dumps(notification, default=str))
+        socketio.emit('lobby_update', notification, room=lobby_id)
+
 class Lobby:
     def __init__(self, lobby_id):
         self.lobby_id = lobby_id
@@ -151,7 +167,11 @@ class Lobby:
             'current_turn': 'red',
             'game_started': False,
             'last_move': None,
-            'game_pieces': {}  # Will store piece positions
+            'game_pieces': {},  # Will store piece positions
+            'captured_pieces': {
+                'red': [],  # Pieces captured by red player
+                'blue': []  # Pieces captured by blue player
+            }
         }
 
     def add_player(self, player_id, player_name):
@@ -213,6 +233,9 @@ class Lobby:
         self.game_state['board'] = {}
         for piece_name, node_id in piece_mapping.items():
             self.game_state['board'][node_id] = piece_name
+        
+        # Notify all players about the game start
+        notify_lobby_update(self.lobby_id, 'game_started', self.game_state)
 
     def get_legal_moves_for_piece(self, node_id):
         """Get legal moves for a piece at the given node."""
@@ -230,6 +253,106 @@ class Lobby:
             return []
         
         return get_legal_moves(piece_name, node_id, self.game_state['board'], current_color)
+
+    def execute_move(self, from_node, to_node, player_id):
+        """Execute a move and notify all players."""
+        # Get the piece being moved
+        piece_name = self.game_state['board'].get(from_node)
+        if not piece_name:
+            return False, "No piece at source node"
+        
+        # Verify it's the player's piece
+        player = next((p for p in self.players if p['id'] == player_id), None)
+        if not player or not piece_name.startswith(player['color'] + '_'):
+            return False, "Not your piece"
+        
+        # Verify the move is legal
+        legal_moves = self.get_legal_moves_for_piece(from_node)
+        if to_node not in legal_moves:
+            return False, "Illegal move"
+        
+        # Execute the move
+        # Remove piece from source
+        del self.game_state['board'][from_node]
+        
+        # Check if this is a capture
+        captured_piece = None
+        if to_node in self.game_state['board']:
+            captured_piece = self.game_state['board'][to_node]
+            # Add to captured pieces list
+            self.game_state['captured_pieces'][player['color']].append(captured_piece)
+            print(f"Piece {captured_piece} captured by {player['color']} player")
+        
+        # Place piece at destination
+        self.game_state['board'][to_node] = piece_name
+        
+        # Update game state
+        self.game_state['last_move'] = {
+            'from': from_node,
+            'to': to_node,
+            'piece': piece_name,
+            'captured': captured_piece,
+            'player': player['color']
+        }
+        
+        # Switch turns
+        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        
+        # Notify all players about the move
+        notify_lobby_update(self.lobby_id, 'piece_moved', self.game_state)
+        
+        return True, self.game_state
+
+# WebSocket event handlers
+@socketio.on('connect')
+def handle_connect():
+    print('Client connected')
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print('Client disconnected')
+
+@socketio.on('join_lobby')
+def handle_join_lobby(data):
+    lobby_id = data.get('lobby_id')
+    player_id = data.get('player_id')
+    
+    print(f'WebSocket: Player {player_id} joining lobby {lobby_id}')
+    
+    if lobby_id in lobbies:
+        join_room(lobby_id)
+        print(f'WebSocket: Player {player_id} joined room {lobby_id}')
+        print(f'Current lobby state: {lobbies[lobby_id].get_lobby_info()}')
+        
+        # Send current lobby state to the joining player
+        lobby_info = lobbies[lobby_id].get_lobby_info()
+        # Convert datetime objects to strings for JSON serialization
+        lobby_info = json.loads(json.dumps(lobby_info, default=str))
+        emit('lobby_update', {
+            'event_type': 'joined_lobby',
+            'lobby_info': lobby_info
+        })
+    else:
+        print(f'WebSocket: Lobby {lobby_id} not found')
+
+@socketio.on('leave_lobby')
+def handle_leave_lobby(data):
+    lobby_id = data.get('lobby_id')
+    player_id = data.get('player_id')
+    
+    if lobby_id in lobbies:
+        leave_room(lobby_id)
+        print(f'Player {player_id} left lobby {lobby_id}')
+        
+        # Remove player from lobby
+        lobby = lobbies[lobby_id]
+        should_cleanup = lobby.remove_player(player_id)
+        
+        if should_cleanup:
+            del lobbies[lobby_id]
+        else:
+            # Notify remaining players
+            notify_lobby_update(lobby_id, 'player_left', {'player_id': player_id})
 
 @app.route('/')
 def landing():
@@ -269,6 +392,13 @@ def join_lobby_api(lobby_id):
     lobby = lobbies[lobby_id]
     role = lobby.add_player(player_id, player_name)
     
+    print(f"Player {player_id} joined lobby {lobby_id} as {role}")
+    print(f"Current players: {[p['id'] for p in lobby.players]}")
+    print(f"Current spectators: {[s['id'] for s in lobby.spectators]}")
+    
+    # Notify all players about the new player
+    notify_lobby_update(lobby_id, 'player_joined', {'player_id': player_id, 'role': role})
+    
     return jsonify({
         'role': role,
         'lobby_info': lobby.get_lobby_info()
@@ -287,6 +417,9 @@ def leave_lobby_api(lobby_id):
     
     if should_cleanup:
         del lobbies[lobby_id]
+    else:
+        # Notify remaining players
+        notify_lobby_update(lobby_id, 'player_left', {'player_id': player_id})
     
     return jsonify({'success': True})
 
@@ -333,6 +466,42 @@ def start_game_api(lobby_id):
         'game_state': lobby.game_state
     })
 
+@app.route('/api/lobby/<lobby_id>/move', methods=['POST'])
+def move_piece_api(lobby_id):
+    if lobby_id not in lobbies:
+        return jsonify({'error': 'Lobby not found'}), 404
+    
+    data = request.get_json()
+    from_node = data.get('from_node')
+    to_node = data.get('to_node')
+    player_id = data.get('player_id')
+    
+    lobby = lobbies[lobby_id]
+    
+    # Verify player is in this lobby
+    player = next((p for p in lobby.players if p['id'] == player_id), None)
+    if not player:
+        return jsonify({'error': 'Player not in lobby'}), 403
+    
+    # Verify game is started
+    if not lobby.game_state['game_started']:
+        return jsonify({'error': 'Game not started'}), 400
+    
+    # Verify it's the player's turn
+    if player['color'] != lobby.game_state['current_turn']:
+        return jsonify({'error': 'Not your turn'}), 400
+    
+    # Execute the move
+    success, result = lobby.execute_move(from_node, to_node, player_id)
+    
+    if success:
+        return jsonify({
+            'success': True,
+            'game_state': result
+        })
+    else:
+        return jsonify({'error': result}), 400
+
 @app.route('/api/lobby/<lobby_id>/update-state', methods=['POST'])
 def update_game_state(lobby_id):
     if lobby_id not in lobbies:
@@ -359,4 +528,4 @@ def api_hello():
     return jsonify({"message": "Hello from the API!"})
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000) 
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000) 
