@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sava</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/js/game-config.js"></script>
     <style>
         * {
             margin: 0;
@@ -181,7 +182,6 @@
         <div class="header">
             <div class="logo">♔♛</div>
             <h1>Sava</h1>
-            <p class="subtitle">A turn-based strategy game with a unique board</p>
         </div>
 
         <div class="nav-bar">
@@ -193,19 +193,6 @@
             <div class="game-board" id="game-board">
                 <!-- Nodes and strands will be created by JavaScript -->
             </div>
-        </div>
-        
-        <div class="status" id="status">
-            <strong>Welcome!</strong> Click on any node to start the game.
-        </div>
-        
-        <div>
-            <button class="btn" hx-get="/api/hello" hx-target="#status">
-                Test API
-            </button>
-            <button class="btn" onclick="resetBoard()">
-                Reset Board
-            </button>
         </div>
     </div>
 
@@ -225,7 +212,7 @@
                 this.nodes = [];
                 
                 // Create center nodes (4 nodes in a square)
-                const centerOffset = 30;
+                const centerOffset = GAME_CONFIG.board_scaling.center_offset;
                 const centerPositions = [
                     {x: this.centerX - centerOffset, y: this.centerY - centerOffset},
                     {x: this.centerX + centerOffset, y: this.centerY - centerOffset},
@@ -238,7 +225,8 @@
                 });
 
                 // Create concentric rings
-                const ringRadii = [80, 160, 240];
+                const maxRadius = Math.min(this.board.offsetWidth, this.board.offsetHeight) * GAME_CONFIG.board_scaling.max_radius_multiplier;
+                const ringRadii = GAME_CONFIG.board_scaling.ring_radius_ratios.map(ratio => maxRadius * ratio);
                 ringRadii.forEach((radius, ringIndex) => {
                     this.createRing(radius, ringIndex + 1);
                 });
@@ -276,7 +264,8 @@
 
             createStrands() {
                 // Ring strands (circular)
-                const ringRadii = [80, 160, 240];
+                const maxRadius = Math.min(this.board.offsetWidth, this.board.offsetHeight) * GAME_CONFIG.board_scaling.max_radius_multiplier;
+                const ringRadii = GAME_CONFIG.board_scaling.ring_radius_ratios.map(ratio => maxRadius * ratio);
                 ringRadii.forEach((radius, index) => {
                     const ringStrand = document.createElement('div');
                     ringStrand.className = 'strand ring';
@@ -294,33 +283,18 @@
             createNodeConnections() {
                 // Create SVG for curved strands
                 const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                svg.setAttribute('width', '600');
-                svg.setAttribute('height', '600');
+                svg.setAttribute('width', this.board.offsetWidth);
+                svg.setAttribute('height', this.board.offsetHeight);
                 svg.style.position = 'absolute';
                 svg.style.top = '0';
                 svg.style.left = '0';
                 svg.style.zIndex = '5';
                 this.board.appendChild(svg);
 
-                // Vertical strand 1: R3N11 -> R2N11 -> R1N11 -> C0 -> C2 -> R1N5 -> R2N5 -> R3N5
-                this.createCurvedStrand(svg, [
-                    'R3N11', 'R2N11', 'R1N11', 'C0', 'C2', 'R1N5', 'R2N5', 'R3N5'
-                ], 'vertical');
-
-                // Vertical strand 2 (mirrored): R3N13 -> R2N13 -> R1N13 -> C1 -> C3 -> R1N3 -> R2N3 -> R3N3
-                this.createCurvedStrand(svg, [
-                    'R3N13', 'R2N13', 'R1N13', 'C1', 'C3', 'R1N3', 'R2N3', 'R3N3'
-                ], 'vertical');
-
-                // Horizontal strand 1: R3N7 -> R2N7 -> R1N7 -> C2 -> C3 -> R1N1 -> R2N1 -> R3N1
-                this.createCurvedStrand(svg, [
-                    'R3N7', 'R2N7', 'R1N7', 'C2', 'C3', 'R1N1', 'R2N1', 'R3N1'
-                ], 'horizontal');
-
-                // Horizontal strand 2 (mirrored): R3N9 -> R2N9 -> R1N9 -> C0 -> C1 -> R1N15 -> R2N15 -> R3N15
-                this.createCurvedStrand(svg, [
-                    'R3N9', 'R2N9', 'R1N9', 'C0', 'C1', 'R1N15', 'R2N15', 'R3N15'
-                ], 'horizontal');
+                // Create strands using shared configuration
+                GAME_CONFIG.strand_definitions.forEach(strandDef => {
+                    this.createCurvedStrand(svg, strandDef.nodes, strandDef.direction);
+                });
             }
 
             createCurvedStrand(svg, nodeIds, direction) {

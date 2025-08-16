@@ -38,6 +38,29 @@ const GameLogic = {
             neighbors.add(`R${ringIndex}N${nextNode}`);
         }
         
+        // Check center node connections
+        if (nodeId.startsWith('C')) {
+            const centerIndex = parseInt(nodeId[1]);
+            // Center nodes form a diamond pattern based on strand connections:
+            // C0 connects to C1 and C2
+            // C1 connects to C0 and C3  
+            // C2 connects to C0 and C3
+            // C3 connects to C1 and C2
+            if (centerIndex === 0) {  // C0
+                neighbors.add('C1');  // Horizontal strand 2
+                neighbors.add('C2');  // Vertical strand 1
+            } else if (centerIndex === 1) {  // C1
+                neighbors.add('C0');  // Horizontal strand 2
+                neighbors.add('C3');  // Vertical strand 2
+            } else if (centerIndex === 2) {  // C2
+                neighbors.add('C0');  // Vertical strand 1
+                neighbors.add('C3');  // Horizontal strand 1
+            } else if (centerIndex === 3) {  // C3
+                neighbors.add('C1');  // Vertical strand 2
+                neighbors.add('C2');  // Horizontal strand 1
+            }
+        }
+        
         // Check strand connections
         GAME_CONFIG.strand_definitions.forEach(strandDef => {
             const nodeIndex = strandDef.nodes.indexOf(nodeId);

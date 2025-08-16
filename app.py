@@ -65,9 +65,24 @@ def get_neighboring_nodes(node_id):
     
     # Add center neighbors (if it's a center node)
     if node_id.startswith('C'):
-        center_nodes = ['C0', 'C1', 'C2', 'C3']
-        neighbors.update(center_nodes)
-        neighbors.discard(node_id)  # Remove self
+        center_index = int(node_id[1])
+        # Center nodes form a diamond pattern based on strand connections:
+        # C0 connects to C1 and C2
+        # C1 connects to C0 and C3  
+        # C2 connects to C0 and C3
+        # C3 connects to C1 and C2
+        if center_index == 0:  # C0
+            neighbors.add('C1')  # Horizontal strand 2
+            neighbors.add('C2')  # Vertical strand 1
+        elif center_index == 1:  # C1
+            neighbors.add('C0')  # Horizontal strand 2
+            neighbors.add('C3')  # Vertical strand 2
+        elif center_index == 2:  # C2
+            neighbors.add('C0')  # Vertical strand 1
+            neighbors.add('C3')  # Horizontal strand 1
+        elif center_index == 3:  # C3
+            neighbors.add('C1')  # Vertical strand 2
+            neighbors.add('C2')  # Horizontal strand 1
     
     # Add strand neighbors
     for strand_def in GAME_CONFIG['strand_definitions']:
