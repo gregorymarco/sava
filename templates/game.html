@@ -385,14 +385,6 @@
 
         let gameBoard;
 
-        function resetBoard() {
-            if (gameBoard) {
-                gameBoard.initializeBoard();
-            }
-            document.getElementById('status').innerHTML = 
-                '<strong>Board reset!</strong> Click on any node to start the game.';
-        }
-
         // Initialize the board when the page loads
         document.addEventListener('DOMContentLoaded', () => {
             gameBoard = new MolecularBoard();

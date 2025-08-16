@@ -4,6 +4,7 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import uuid
 import json
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -14,44 +15,38 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 lobbies = {}
 game_states = {}
 
-# Game piece definitions
-PIECE_TYPES = {
-    'red': {
-        'matron mother': '♔',
-        'wizard': '♕', 
-        'priestess': '♗',
-        'weaponmaster': '♘',
-        'orc': '♙'
-    },
-    'blue': {
-        'matron mother': '♚',
-        'wizard': '♛',
-        'priestess': '♝',
-        'weaponmaster': '♞',
-        'orc': '♟'
-    }
-}
+# Load game configuration from JSON file
+def load_game_config():
+    """Load game configuration from JSON file."""
+    try:
+        config_path = os.path.join(app.static_folder, 'game-config.json')
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        print("Game configuration loaded successfully")
+        return config
+    except Exception as e:
+        print(f"Error loading game configuration: {e}")
+        # Fallback to default configuration
+        return get_default_game_config()
+
+def get_default_game_config():
+    """Fallback default game configuration if JSON loading fails."""
+    return {}
+
+# Load configuration at startup
+GAME_CONFIG = load_game_config()
+
+# Game configuration constants
+MAX_PLAYERS = GAME_CONFIG["game_rules"]["max_players"]
+AUTO_START_THRESHOLD = GAME_CONFIG["game_rules"]["auto_start_threshold"]
 
 # Board connectivity - defines which nodes are connected
-BOARD_CONNECTIONS = {
-    # Ring connections (circular)
-    'rings': {
-        'R1': list(range(16)),  # Ring 1 has 16 nodes
-        'R2': list(range(16)),  # Ring 2 has 16 nodes  
-        'R3': list(range(16))   # Ring 3 has 16 nodes
-    },
-    # Strand connections (the specific paths you defined)
-    'strands': [
-        # Vertical strand 1
-        ['R3N11', 'R2N11', 'R1N11', 'C0', 'C2', 'R1N5', 'R2N5', 'R3N5'],
-        # Vertical strand 2
-        ['R3N13', 'R2N13', 'R1N13', 'C1', 'C3', 'R1N3', 'R2N3', 'R3N3'],
-        # Horizontal strand 1
-        ['R3N7', 'R2N7', 'R1N7', 'C2', 'C3', 'R1N1', 'R2N1', 'R3N1'],
-        # Horizontal strand 2
-        ['R3N9', 'R2N9', 'R1N9', 'C0', 'C1', 'R1N15', 'R2N15', 'R3N15']
-    ]
-}
+# This is now loaded from the shared game-config.json file
+BOARD_CONNECTIONS = GAME_CONFIG["board_connections"]
+
+def get_strand_nodes():
+    """Get list of strand node arrays for backward compatibility."""
+    return [strand_def['nodes'] for strand_def in GAME_CONFIG['strand_definitions']]
 
 def get_neighboring_nodes(node_id):
     """Get all neighboring nodes for a given node."""
@@ -75,7 +70,8 @@ def get_neighboring_nodes(node_id):
         neighbors.discard(node_id)  # Remove self
     
     # Add strand neighbors
-    for strand in BOARD_CONNECTIONS['strands']:
+    for strand_def in GAME_CONFIG['strand_definitions']:
+        strand = strand_def['nodes']
         if node_id in strand:
             idx = strand.index(node_id)
             if idx > 0:
@@ -181,7 +177,7 @@ class Lobby:
                 'name': player_name,
                 'color': 'red' if len(self.players) == 0 else 'blue',
                 'joined_at': datetime.now()
-            })
+            })       
             return 'player'
         else:
             self.spectators.append({
@@ -235,7 +231,21 @@ class Lobby:
             self.game_state['board'][node_id] = piece_name
         
         # Notify all players about the game start
+        print(f"Notifying all players in lobby {self.lobby_id} about game start")
         notify_lobby_update(self.lobby_id, 'game_started', self.game_state)
+
+    def auto_start_game(self):
+        """Automatically start the game with default piece mapping when two players join."""
+        print(f"Auto-starting game for lobby {self.lobby_id}")
+        print(f"Players: {[p['id'] for p in self.players]}")
+        
+        # Use shared configuration for piece placement
+        # Note: This would need to be loaded from the shared config file
+        # For now, keeping the existing mapping but it should be moved to game-config.js
+        piece_mapping = GAME_CONFIG["initial_piece_placement"]
+        
+        self.setup_game_board(piece_mapping)
+        print(f"Game auto-started successfully for lobby {self.lobby_id}")
 
     def get_legal_moves_for_piece(self, node_id):
         """Get legal moves for a piece at the given node."""
@@ -332,6 +342,12 @@ def handle_join_lobby(data):
             'event_type': 'joined_lobby',
             'lobby_info': lobby_info
         })
+        
+        # Check if we should auto-start the game after this player joins
+        lobby = lobbies[lobby_id]
+        if len(lobby.players) == 2 and not lobby.game_state['game_started']:
+            print(f'Auto-starting game for lobby {lobby_id}')
+            lobby.auto_start_game()
     else:
         print(f'WebSocket: Lobby {lobby_id} not found')
 
@@ -444,28 +460,6 @@ def get_legal_moves_api(lobby_id, node_id):
         'current_turn': lobby.game_state['current_turn']
     })
 
-@app.route('/api/lobby/<lobby_id>/start-game', methods=['POST'])
-def start_game_api(lobby_id):
-    if lobby_id not in lobbies:
-        return jsonify({'error': 'Lobby not found'}), 404
-    
-    data = request.get_json()
-    piece_mapping = data.get('piece_mapping', {})
-    
-    lobby = lobbies[lobby_id]
-    
-    # Verify we have exactly 2 players
-    if len(lobby.players) != 2:
-        return jsonify({'error': 'Need exactly 2 players to start'}), 400
-    
-    # Set up the game board
-    lobby.setup_game_board(piece_mapping)
-    
-    return jsonify({
-        'success': True,
-        'game_state': lobby.game_state
-    })
-
 @app.route('/api/lobby/<lobby_id>/move', methods=['POST'])
 def move_piece_api(lobby_id):
     if lobby_id not in lobbies:
@@ -523,9 +517,15 @@ def update_game_state(lobby_id):
     
     return jsonify({'success': True})
 
-@app.route('/api/hello')
-def api_hello():
-    return jsonify({"message": "Hello from the API!"})
+@app.route('/api/game-config')
+def get_game_config():
+    """Return game configuration constants."""
+    config = {
+        'max_players': MAX_PLAYERS,
+        'auto_start_threshold': AUTO_START_THRESHOLD,
+        'board_connections': BOARD_CONNECTIONS
+    }
+    return jsonify(config)
 
 if __name__ == '__main__':
     socketio.run(app, debug=True, host='0.0.0.0', port=5000) 

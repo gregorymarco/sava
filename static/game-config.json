@@ -1,0 +1,84 @@
+{
+    "board_connections": {
+        "rings": {
+            "R1": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+            "R2": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+            "R3": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        }
+    },
+    "strand_definitions": [
+        {
+            "name": "Vertical Strand 1",
+            "nodes": ["R3N11", "R2N11", "R1N11", "C0", "C2", "R1N5", "R2N5", "R3N5"],
+            "direction": "vertical"
+        },
+        {
+            "name": "Vertical Strand 2 (Mirrored)",
+            "nodes": ["R3N13", "R2N13", "R1N13", "C1", "C3", "R1N3", "R2N3", "R3N3"],
+            "direction": "vertical"
+        },
+        {
+            "name": "Horizontal Strand 1",
+            "nodes": ["R3N7", "R2N7", "R1N7", "C2", "C3", "R1N1", "R2N1", "R3N1"],
+            "direction": "horizontal"
+        },
+        {
+            "name": "Horizontal Strand 2 (Mirrored)",
+            "nodes": ["R3N9", "R2N9", "R1N9", "C0", "C1", "R1N15", "R2N15", "R3N15"],
+            "direction": "horizontal"
+        }
+    ],
+    "piece_types": {
+        "red": {
+            "matron mother": "♔",
+            "wizard": "♕",
+            "priestess": "♗",
+            "weaponmaster": "♘",
+            "orc": "♙"
+        },
+        "blue": {
+            "matron mother": "♚",
+            "wizard": "♛",
+            "priestess": "♝",
+            "weaponmaster": "♞",
+            "orc": "♟"
+        }
+    },
+    "board_scaling": {
+        "center_offset": 35,
+        "max_radius_multiplier": 0.35,
+        "ring_radius_ratios": [0.33, 0.67, 1.0],
+        "node_size": 25
+    },
+    "game_rules": {
+        "max_players": 2,
+        "auto_start_threshold": 2
+    },
+    "center_nodes": ["C0", "C1", "C2", "C3"],
+    "initial_piece_placement": {
+        "red_matron mother": "R3N12",
+        "red_wizard": "R2N13",
+        "red_priestess": "R2N12",
+        "red_weaponmaster": "R2N11",
+        "red_orc_0": "R3N11",
+        "red_orc_1": "R3N10",
+        "red_orc_2": "R3N13",
+        "red_orc_3": "R3N14",
+        "red_orc_4": "R1N11",
+        "red_orc_5": "R2N10",
+        "red_orc_6": "R2N14",
+        "red_orc_7": "R1N13",
+        "blue_matron mother": "R3N4",
+        "blue_wizard": "R2N5",
+        "blue_priestess": "R2N4",
+        "blue_weaponmaster": "R2N3",
+        "blue_orc_0": "R3N6",
+        "blue_orc_1": "R3N5",
+        "blue_orc_2": "R3N3",
+        "blue_orc_3": "R3N2",
+        "blue_orc_4": "R2N6",
+        "blue_orc_5": "R2N2",
+        "blue_orc_6": "R1N3",
+        "blue_orc_7": "R1N5"
+    }
+} 
