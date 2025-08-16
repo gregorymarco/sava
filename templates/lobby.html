@@ -414,6 +414,17 @@
             animation: pulse 1.5s infinite;
         }
 
+        .node.enemy-piece {
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+
+        .node.enemy-piece:hover {
+            background: #ffebee;
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(244, 67, 54, 0.3);
+        }
+
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.1); }
@@ -674,8 +685,9 @@
                     if (gameBoard && lobby_info.game_state.board) {
                         gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
                     }
-                    document.getElementById('status-text').textContent = 'Game started! ' + 
-                        (lobby_info.game_state.current_turn === 'red' ? 'Red' : 'Blue') + ' to move.';
+                    const currentTurn = lobby_info.game_state.current_turn;
+                    document.getElementById('status-text').textContent = 
+                        `Game in progress - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
                     document.getElementById('status-indicator').className = 'status-indicator status-playing';
                     document.getElementById('start-game-btn').disabled = true;
                     break;
@@ -689,11 +701,12 @@
                     // Update status with move information
                     const moveInfo = lobby_info.game_state.last_move;
                     if (moveInfo) {
-                        let statusText = `${moveInfo.player} moved ${moveInfo.piece} from ${moveInfo.from} to ${moveInfo.to}`;
+                        let statusText = `${moveInfo.player.charAt(0).toUpperCase() + moveInfo.player.slice(1)} moved ${moveInfo.piece} from ${moveInfo.from} to ${moveInfo.to}`;
                         if (moveInfo.captured) {
                             statusText += ` (captured ${moveInfo.captured})`;
                         }
-                        statusText += `. ${lobby_info.game_state.current_turn} to move.`;
+                        const currentTurn = lobby_info.game_state.current_turn;
+                        statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
                         document.getElementById('status-text').textContent = statusText;
                     }
                     
@@ -785,8 +798,8 @@
             if (lobbyState.game_state.game_started) {
                 // Game is already started
                 statusIndicator.className = 'status-indicator status-playing';
-                statusText.textContent = 'Game started! ' + 
-                    (lobbyState.game_state.current_turn === 'red' ? 'Red' : 'Blue') + ' to move.';
+                const currentTurn = lobbyState.game_state.current_turn;
+                statusText.textContent = `Game in progress - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
             } else if (lobbyState.can_start) {
                 // Ready to start but not started yet
                 statusIndicator.className = 'status-indicator status-ready';
@@ -997,6 +1010,11 @@
                 const node = event.target;
                 const nodeId = node.getAttribute('data-id');
                 
+                console.log('=== NODE CLICK DEBUG ===');
+                console.log('Node clicked:', nodeId);
+                console.log('Current lobby state:', lobbyState);
+                console.log('Player role:', playerRole);
+                
                 // Only allow moves if player is a player (not spectator) and it's their turn
                 if (playerRole !== 'player') {
                     document.getElementById('status-text').textContent = 'Spectators cannot make moves';
@@ -1017,12 +1035,73 @@
                     this.selectedNode.classList.remove('selected');
                 }
                 
-                // Select new node
-                node.classList.add('selected');
-                this.selectedNode = node;
+                // Check if the clicked node has a piece and if it belongs to the current player
+                const boardState = lobbyState?.game_state?.board || {};
+                const pieceName = boardState[nodeId];
                 
-                // Get legal moves for this piece
-                this.getLegalMoves(nodeId);
+                console.log('Board state:', boardState);
+                console.log('Piece at node:', pieceName);
+                
+                if (pieceName) {
+                    // Check if this piece belongs to the current player
+                    const currentTurn = lobbyState?.game_state?.current_turn;
+                    console.log('Current turn:', currentTurn);
+                    console.log('Piece name:', pieceName);
+                    console.log('Piece starts with red_:', pieceName.startsWith('red_'));
+                    console.log('Piece starts with blue_:', pieceName.startsWith('blue_'));
+                    console.log('Piece starts with red :', pieceName.startsWith('red '));
+                    console.log('Piece starts with blue :', pieceName.startsWith('blue '));
+                    
+                    // Safety check: ensure we have a valid current turn
+                    if (!currentTurn) {
+                        console.error('No current turn found in lobby state');
+                        document.getElementById('status-text').textContent = 'Game state error: no current turn found';
+                        return;
+                    }
+                    
+                    // Find the current player's color from the lobby state
+                    const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+                    if (!currentPlayer) {
+                        console.error('Current player not found in lobby state');
+                        document.getElementById('status-text').textContent = 'Game state error: player not found';
+                        return;
+                    }
+                    
+                    const playerColor = currentPlayer.color;
+                    console.log('Player color:', playerColor);
+                    console.log('Current turn:', currentTurn);
+                    
+                    // Check if this piece belongs to the current player (not the current turn)
+                    // Piece names can be: "red_matron mother", "red_orc_0", "blue_wizard", etc.
+                    const isFriendlyPiece = pieceName.startsWith(playerColor + '_') || pieceName.startsWith(playerColor + ' ');
+                    console.log('Current turn + "_":', currentTurn + '_');
+                    console.log('Current turn + " ":', currentTurn + ' ');
+                    console.log('Player color + "_":', playerColor + '_');
+                    console.log('Player color + " ":', playerColor + ' ');
+                    console.log('Is friendly piece:', isFriendlyPiece);
+                    
+                    if (isFriendlyPiece) {
+                        // This is the player's piece - select it and show legal moves
+                        console.log('Selecting friendly piece, getting legal moves');
+                        node.classList.add('selected');
+                        this.selectedNode = node;
+                        this.getLegalMoves(nodeId);
+                    } else {
+                        // This is an enemy piece - don't select it
+                        console.log('Enemy piece clicked, not selecting');
+                        document.getElementById('status-text').textContent = 
+                            `Cannot select enemy piece. You can only select your own pieces.`;
+                        return;
+                    }
+                } else {
+                    // Empty node - just select it (though this might not be useful)
+                    console.log('Empty node clicked');
+                    node.classList.add('selected');
+                    this.selectedNode = node;
+                    document.getElementById('status-text').textContent = 
+                        `Selected empty node ${nodeId}`;
+                }
+                console.log('=== END DEBUG ===');
             }
 
             async executeMove(fromNode, toNode) {
@@ -1057,14 +1136,22 @@
                         }
                         
                         // Update status
-                        const moveInfo = data.move;
-                        let statusText = `${moveInfo.player} moved ${moveInfo.piece} from ${moveInfo.from} to ${moveInfo.to}`;
-                        if (moveInfo.captured) {
-                            statusText += ` (captured ${moveInfo.captured})`;
+                        const moveInfo = data.game_state.last_move;
+                        if (moveInfo) {
+                            let statusText = `${moveInfo.player.charAt(0).toUpperCase() + moveInfo.player.slice(1)} moved ${moveInfo.piece} from ${moveInfo.from} to ${moveInfo.to}`;
+                            if (moveInfo.captured) {
+                                statusText += ` (captured ${moveInfo.captured})`;
+                            }
+                            const currentTurn = data.game_state.current_turn;
+                            statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
+                            
+                            document.getElementById('status-text').textContent = statusText;
+                        } else {
+                            // Fallback status update
+                            const currentTurn = data.game_state.current_turn;
+                            document.getElementById('status-text').textContent = 
+                                `Move completed. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
                         }
-                        statusText += `. ${data.game_state.current_turn} to move.`;
-                        
-                        document.getElementById('status-text').textContent = statusText;
                         
                         // Update local lobby state to match server
                         lobbyState = data.game_state;
@@ -1079,9 +1166,39 @@
 
             async getLegalMoves(nodeId) {
                 try {
+                    console.log('=== GET LEGAL MOVES DEBUG ===');
+                    console.log('Getting legal moves for node:', nodeId);
+                    
+                    // Double-check: ensure this is a friendly piece before making the API call
+                    const boardState = lobbyState?.game_state?.board || {};
+                    const pieceName = boardState[nodeId];
+                    const currentTurn = lobbyState?.game_state?.current_turn;
+                    
+                    console.log('Piece name:', pieceName);
+                    console.log('Current turn:', currentTurn);
+                    
+                    if (pieceName && currentTurn) {
+                        // Find the current player's color
+                        const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+                        if (currentPlayer) {
+                            const playerColor = currentPlayer.color;
+                            const isFriendlyPiece = pieceName.startsWith(playerColor + '_') || pieceName.startsWith(playerColor + ' ');
+                            console.log('Player color:', playerColor);
+                            console.log('Is friendly piece check:', isFriendlyPiece);
+                            if (!isFriendlyPiece) {
+                                console.error('getLegalMoves called for enemy piece! This should not happen.');
+                                document.getElementById('status-text').textContent = 'Error: Cannot get moves for enemy piece';
+                                return;
+                            }
+                        }
+                    }
+                    
                     const lobbyId = document.getElementById('lobby-id').textContent;
+                    console.log('Making API call to:', `/api/lobby/${lobbyId}/legal-moves/${nodeId}`);
                     const response = await fetch(`/api/lobby/${lobbyId}/legal-moves/${nodeId}`);
                     const data = await response.json();
+                    
+                    console.log('API response:', data);
                     
                     if (data.error) {
                         document.getElementById('status-text').textContent = 'Error getting legal moves: ' + data.error;
@@ -1096,6 +1213,7 @@
                         document.getElementById('status-text').textContent = 
                             `No legal moves for ${nodeId}`;
                     }
+                    console.log('=== END GET LEGAL MOVES DEBUG ===');
                 } catch (error) {
                     console.error('Failed to get legal moves:', error);
                     document.getElementById('status-text').textContent = 'Failed to get legal moves';
@@ -1123,6 +1241,7 @@
                     node.element.textContent = node.id;
                     node.element.style.background = '#fff';
                     node.element.style.borderColor = '#333';
+                    node.element.classList.remove('enemy-piece');
                 });
 
                 // Place pieces according to board state
@@ -1136,9 +1255,23 @@
                             
                             // Color the node based on piece color
                             const isRed = pieceName.startsWith('red_');
-                            node.element.style.background = isRed ? '#ffebee' : '#e3f2fd';
-                            node.element.style.color = isRed ? '#c62828' : '#1565c0';
-                            node.element.style.borderColor = isRed ? '#ef5350' : '#42a5f5';
+                            const currentTurn = lobbyState?.game_state?.current_turn;
+                            const isEnemyPiece = pieceName.startsWith(currentTurn + '_') === false;
+                            
+                            if (isEnemyPiece) {
+                                // Enemy piece - add enemy-piece class and style
+                                node.element.classList.add('enemy-piece');
+                                node.element.style.background = isRed ? '#ffebee' : '#e3f2fd';
+                                node.element.style.color = isRed ? '#c62828' : '#1565c0';
+                                node.element.style.borderColor = isRed ? '#ef5350' : '#42a5f5';
+                                node.element.style.opacity = '0.8';
+                            } else {
+                                // Friendly piece - normal styling
+                                node.element.style.background = isRed ? '#ffebee' : '#e3f2fd';
+                                node.element.style.color = isRed ? '#c62828' : '#1565c0';
+                                node.element.style.borderColor = isRed ? '#ef5350' : '#42a5f5';
+                                node.element.style.opacity = '1';
+                            }
                         }
                     }
                 }

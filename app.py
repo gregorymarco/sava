@@ -141,10 +141,71 @@ def get_legal_moves_for_orc(node_id, board_state, current_color):
     
     return list(legal_moves)
 
+def get_legal_moves_for_priestess(node_id, board_state, current_color):
+    """Calculate legal moves for a Priestess piece."""
+    legal_moves = set()
+    
+    # Get all possible paths (rings and strands) that this node is part of
+    paths = []
+    
+    # Add ring path if it's a ring node
+    if node_id.startswith('R'):
+        parts = node_id.split('N')
+        ring_num = parts[0]
+        ring_size = 16
+        ring_path = [f'{ring_num}N{i}' for i in range(ring_size)]
+        paths.append(ring_path)
+    
+    # Add strand paths if this node is part of any strands
+    for strand_def in GAME_CONFIG['strand_definitions']:
+        strand = strand_def['nodes']
+        if node_id in strand:
+            paths.append(strand)
+    
+    # For each path, calculate legal moves along that path
+    for path in paths:
+        current_idx = path.index(node_id)
+        
+        # Check moves in the positive direction
+        for i in range(current_idx + 1, len(path)):
+            target_node = path[i]
+            
+            # If there's a piece at this node, we can't move past it
+            if target_node in board_state:
+                # Check if we can capture (enemy piece)
+                piece_name = board_state[target_node]
+                if is_enemy_piece(piece_name, current_color):
+                    legal_moves.add(target_node)
+                # Stop checking this direction (can't move through pieces)
+                break
+            else:
+                # Empty node, can move here
+                legal_moves.add(target_node)
+        
+        # Check moves in the negative direction
+        for i in range(current_idx - 1, -1, -1):
+            target_node = path[i]
+            
+            # If there's a piece at this node, we can't move past it
+            if target_node in board_state:
+                # Check if we can capture (enemy piece)
+                piece_name = board_state[target_node]
+                if is_enemy_piece(piece_name, current_color):
+                    legal_moves.add(target_node)
+                # Stop checking this direction (can't move through pieces)
+                break
+            else:
+                # Empty node, can move here
+                legal_moves.add(target_node)
+    
+    return list(legal_moves)
+
 def get_legal_moves(piece_name, node_id, board_state, current_color):
     """Get legal moves for any piece type."""
     if 'orc' in piece_name:
         return get_legal_moves_for_orc(node_id, board_state, current_color)
+    elif 'priestess' in piece_name:
+        return get_legal_moves_for_priestess(node_id, board_state, current_color)
     else:
         # For other pieces, return all neighboring nodes (placeholder)
         neighbors = get_neighboring_nodes(node_id)

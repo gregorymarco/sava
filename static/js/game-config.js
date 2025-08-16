@@ -19,106 +19,31 @@ async function loadGameConfig() {
 
 // Helper functions for game logic
 const GameLogic = {
-    // Get all neighboring nodes for a given node
-    getNeighboringNodes: function(nodeId) {
-        if (!GAME_CONFIG) return [];
+    // Utility functions that don't duplicate backend logic
+    getPieceSymbol: function(pieceName) {
+        if (!GAME_CONFIG || !pieceName) return pieceName;
         
-        const neighbors = new Set();
+        const parts = pieceName.split('_');
+        const color = parts[0];
         
-        // Check ring connections
-        if (nodeId.startsWith('R')) {
-            const [ring, nodeNum] = nodeId.match(/R(\d+)N(\d+)/).slice(1);
-            const ringIndex = parseInt(ring);
-            const nodeIndex = parseInt(nodeNum);
-            
-            // Add adjacent nodes on the same ring
-            const prevNode = (nodeIndex - 1 + 16) % 16;
-            const nextNode = (nodeIndex + 1) % 16;
-            neighbors.add(`R${ringIndex}N${prevNode}`);
-            neighbors.add(`R${ringIndex}N${nextNode}`);
+        // Handle orc pieces (they have names like "red_orc_0", "blue_orc_1")
+        if (pieceName.includes('orc')) {
+            return GAME_CONFIG.piece_types[color].orc;
         }
         
-        // Check center node connections
-        if (nodeId.startsWith('C')) {
-            const centerIndex = parseInt(nodeId[1]);
-            // Center nodes form a diamond pattern based on strand connections:
-            // C0 connects to C1 and C2
-            // C1 connects to C0 and C3  
-            // C2 connects to C0 and C3
-            // C3 connects to C1 and C2
-            if (centerIndex === 0) {  // C0
-                neighbors.add('C1');  // Horizontal strand 2
-                neighbors.add('C2');  // Vertical strand 1
-            } else if (centerIndex === 1) {  // C1
-                neighbors.add('C0');  // Horizontal strand 2
-                neighbors.add('C3');  // Vertical strand 2
-            } else if (centerIndex === 2) {  // C2
-                neighbors.add('C0');  // Vertical strand 1
-                neighbors.add('C3');  // Horizontal strand 1
-            } else if (centerIndex === 3) {  // C3
-                neighbors.add('C1');  // Vertical strand 2
-                neighbors.add('C2');  // Horizontal strand 1
-            }
-        }
-        
-        // Check strand connections
-        GAME_CONFIG.strand_definitions.forEach(strandDef => {
-            const nodeIndex = strandDef.nodes.indexOf(nodeId);
-            if (nodeIndex !== -1) {
-                // Add nodes before and after on the strand
-                if (nodeIndex > 0) {
-                    neighbors.add(strandDef.nodes[nodeIndex - 1]);
-                }
-                if (nodeIndex < strandDef.nodes.length - 1) {
-                    neighbors.add(strandDef.nodes[nodeIndex + 1]);
-                }
-            }
-        });
-        
-        return Array.from(neighbors);
+        // For other pieces, join the remaining parts (e.g., "matron mother")
+        const pieceType = parts.slice(1).join('_');
+        return GAME_CONFIG.piece_types[color][pieceType] || pieceName;
     },
 
-    // Check if a piece belongs to the enemy
     isEnemyPiece: function(pieceName, playerColor) {
+        if (!pieceName) return false;
         return pieceName.startsWith(playerColor === 'red' ? 'blue_' : 'red_');
     },
 
-    // Get piece symbol by name
-    getPieceSymbol: function(pieceName) {
-        if (!GAME_CONFIG) return pieceName;
-        
-        if (pieceName.startsWith('red_')) {
-            const pieceType = pieceName.replace('red_', '');
-            if (pieceType.startsWith('orc_')) {
-                return GAME_CONFIG.piece_types.red.orc;
-            }
-            return GAME_CONFIG.piece_types.red[pieceType] || pieceName;
-        } else if (pieceName.startsWith('blue_')) {
-            const pieceType = pieceName.replace('blue_', '');
-            if (pieceType.startsWith('orc_')) {
-                return GAME_CONFIG.piece_types.blue.orc;
-            }
-            return GAME_CONFIG.piece_types.blue[pieceType] || pieceName;
-        }
-        return pieceName;
-    },
-
-    // Get configuration value with fallback
     getConfig: function(key, defaultValue = null) {
         if (!GAME_CONFIG) return defaultValue;
-        
-        const keys = key.split('.');
-        let value = GAME_CONFIG;
-        
-        for (const k of keys) {
-            if (value && typeof value === 'object' && k in value) {
-                value = value[k];
-            } else {
-                return defaultValue;
-            }
-        }
-        
-        return value;
+        return key.split('.').reduce((obj, k) => obj && obj[k], GAME_CONFIG) ?? defaultValue;
     },
 
     // Get strand node arrays (for backward compatibility)
