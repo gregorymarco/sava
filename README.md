@@ -26,9 +26,7 @@ http://localhost:5000
 ## TODOs
 
 - Game piece Logic
-    - Orcs
     - Wizards
-    - Priestesses
     - Matron Mother
 - Forced-move checks
 - UI facelift with appropriate assets

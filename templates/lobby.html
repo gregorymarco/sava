@@ -413,6 +413,20 @@
             box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
             animation: pulse 1.5s infinite;
         }
+        
+        .node.first-move {
+            background: #a5d6a7;
+            border-color: #66bb6a;
+            box-shadow: 0 0 15px rgba(165, 214, 167, 0.6);
+            animation: pulse 1.5s infinite;
+        }
+        
+        .node.second-move {
+            background: #2e7d32;
+            border-color: #1b5e20;
+            box-shadow: 0 0 15px rgba(46, 125, 50, 0.6);
+            animation: pulse 1.5s infinite;
+        }
 
         .node.enemy-piece {
             cursor: not-allowed;
@@ -568,12 +582,17 @@
                 </div>
             </div>
 
-            <div class="game-board-container">
+                        <div class="game-board-container">
                 <div class="game-board" id="game-board">
                     <!-- Game board will be created by JavaScript -->
                 </div>
                 
-
+                <!-- Weaponmaster move controls -->
+                <div id="weaponmaster-controls" style="display: none; margin-top: 1rem; text-align: center;">
+                    <button class="btn secondary" onclick="gameBoard.cancelWeaponmasterMove()">
+                        Cancel Weaponmaster Move
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -703,7 +722,16 @@
                     if (moveInfo) {
                         let statusText = `${moveInfo.player.charAt(0).toUpperCase() + moveInfo.player.slice(1)} moved ${moveInfo.piece} from ${moveInfo.from} to ${moveInfo.to}`;
                         if (moveInfo.captured) {
-                            statusText += ` (captured ${moveInfo.captured})`;
+                            if (Array.isArray(moveInfo.captured) && moveInfo.captured.length > 0) {
+                                if (moveInfo.captured.length === 1) {
+                                    statusText += ` (captured ${moveInfo.captured[0]})`;
+                                } else {
+                                    statusText += ` (captured ${moveInfo.captured.join(', ')})`;
+                                }
+                            } else if (moveInfo.captured) {
+                                // Handle single capture for backward compatibility
+                                statusText += ` (captured ${moveInfo.captured})`;
+                            }
                         }
                         const currentTurn = lobby_info.game_state.current_turn;
                         statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
@@ -716,6 +744,9 @@
                         gameBoard.selectedNode.classList.remove('selected');
                         gameBoard.selectedNode = null;
                     }
+                    
+                    // Update captured pieces display
+                    updateCapturedPieces();
                     break;
                     
                 case 'player_joined':
@@ -863,6 +894,9 @@
                 this.board = document.getElementById('game-board');
                 this.nodes = [];
                 this.selectedNode = null;
+                this.weaponmasterMode = false;
+                this.firstNode = null;
+                this.weaponmasterMoves = [];
                 this.initializeBoard();
             }
 
@@ -1023,7 +1057,14 @@
                 
                 // Check if this is a legal move for a previously selected piece
                 if (this.selectedNode && node.classList.contains('legal-move')) {
+                    // Regular piece move
                     this.executeMove(this.selectedNode.getAttribute('data-id'), nodeId);
+                    return;
+                }
+                
+                // Check if this is a weaponmaster move
+                if (this.selectedNode && this.weaponmasterMode && (node.classList.contains('first-move') || node.classList.contains('second-move'))) {
+                    this.handleWeaponmasterMove(nodeId);
                     return;
                 }
                 
@@ -1034,6 +1075,11 @@
                 if (this.selectedNode) {
                     this.selectedNode.classList.remove('selected');
                 }
+                
+                // Reset weaponmaster state when selecting a new piece
+                this.weaponmasterMode = false;
+                this.firstNode = null;
+                this.weaponmasterMoves = [];
                 
                 // Check if the clicked node has a piece and if it belongs to the current player
                 const boardState = lobbyState?.game_state?.board || {};
@@ -1085,6 +1131,15 @@
                         console.log('Selecting friendly piece, getting legal moves');
                         node.classList.add('selected');
                         this.selectedNode = node;
+                        
+                        // Check if this is a weaponmaster piece
+                        if (pieceName.includes('weaponmaster')) {
+                            this.weaponmasterMode = true;
+                            document.getElementById('status-text').textContent = 
+                                `Weaponmaster selected. Click a light green node to start your move, then a dark green node to complete it.`;
+                            console.log('Weaponmaster piece selected:', pieceName);
+                        }
+                        
                         this.getLegalMoves(nodeId);
                     } else {
                         // This is an enemy piece - don't select it
@@ -1135,12 +1190,29 @@
                             this.selectedNode = null;
                         }
                         
+                        // Reset weaponmaster state if this was a weaponmaster move
+                        if (this.weaponmasterMode) {
+                            this.weaponmasterMode = false;
+                            this.firstNode = null;
+                            this.weaponmasterMoves = [];
+                            document.getElementById('weaponmaster-controls').style.display = 'none';
+                        }
+                        
                         // Update status
                         const moveInfo = data.game_state.last_move;
                         if (moveInfo) {
                             let statusText = `${moveInfo.player.charAt(0).toUpperCase() + moveInfo.player.slice(1)} moved ${moveInfo.piece} from ${moveInfo.from} to ${moveInfo.to}`;
                             if (moveInfo.captured) {
-                                statusText += ` (captured ${moveInfo.captured})`;
+                                if (Array.isArray(moveInfo.captured) && moveInfo.captured.length > 0) {
+                                    if (moveInfo.captured.length === 1) {
+                                        statusText += ` (captured ${moveInfo.captured[0]})`;
+                                    } else {
+                                        statusText += ` (captured ${moveInfo.captured.join(', ')})`;
+                                    }
+                                } else if (moveInfo.captured) {
+                                    // Handle single capture for backward compatibility
+                                    statusText += ` (captured ${moveInfo.captured})`;
+                                }
                             }
                             const currentTurn = data.game_state.current_turn;
                             statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
@@ -1155,6 +1227,9 @@
                         
                         // Update local lobby state to match server
                         lobbyState = data.game_state;
+                        
+                        // Force update of captured pieces display
+                        updateCapturedPieces();
                     } else {
                         document.getElementById('status-text').textContent = 'Move failed: ' + (data.error || 'Unknown error');
                     }
@@ -1206,9 +1281,17 @@
                     }
                     
                     if (data.legal_moves.length > 0) {
-                        this.highlightLegalMoves(data.legal_moves);
-                        document.getElementById('status-text').textContent = 
-                            `Legal moves for ${nodeId}: ${data.legal_moves.join(', ')}`;
+                        if (this.weaponmasterMode) {
+                            // Store weaponmaster moves for parsing
+                            this.weaponmasterMoves = data.legal_moves;
+                            this.highlightWeaponmasterMoves(data.legal_moves);
+                            document.getElementById('status-text').textContent = 
+                                `Weaponmaster moves available. Click a light green node to start your move.`;
+                        } else {
+                            this.highlightLegalMoves(data.legal_moves);
+                            document.getElementById('status-text').textContent = 
+                                `Legal moves for ${nodeId}: ${data.legal_moves.join(', ')}`;
+                        }
                     } else {
                         document.getElementById('status-text').textContent = 
                             `No legal moves for ${nodeId}`;
@@ -1228,10 +1311,135 @@
                     }
                 });
             }
+            
+            highlightWeaponmasterMoves(legalMoves) {
+                // Parse weaponmaster moves to extract first and second nodes
+                const firstNodes = new Set();
+                const secondNodes = new Set();
+                
+                legalMoves.forEach(move => {
+                    if (move.includes('->')) {
+                        const [firstNode, secondNode] = move.split('->');
+                        firstNodes.add(firstNode);
+                        secondNodes.add(secondNode);
+                    }
+                });
+                
+                // Highlight first nodes in light green
+                firstNodes.forEach(nodeId => {
+                    const node = this.nodes.find(n => n.id === nodeId);
+                    if (node) {
+                        node.element.classList.add('first-move');
+                    }
+                });
+                
+                // Highlight second nodes in dark green
+                secondNodes.forEach(nodeId => {
+                    const node = this.nodes.find(n => n.id === nodeId);
+                    if (node) {
+                        node.element.classList.add('second-move');
+                    }
+                });
+                
+                console.log('Weaponmaster moves highlighted:', { firstNodes: Array.from(firstNodes), secondNodes: Array.from(secondNodes) });
+            }
+            
+            handleWeaponmasterMove(nodeId) {
+                if (!this.firstNode) {
+                    // First node selection
+                    if (this.nodes.find(n => n.id === nodeId)?.element.classList.contains('first-move')) {
+                        this.firstNode = nodeId;
+                        
+                        // Highlight the selected first node
+                        const firstNodeElement = this.nodes.find(n => n.id === nodeId)?.element;
+                        if (firstNodeElement) {
+                            firstNodeElement.classList.remove('first-move');
+                            firstNodeElement.classList.add('selected');
+                        }
+                        
+                        // Clear first move indicators and show only valid second moves
+                        this.clearLegalMoveIndicators();
+                        this.showValidSecondMoves(nodeId);
+                        
+                        // Show weaponmaster controls
+                        document.getElementById('weaponmaster-controls').style.display = 'block';
+                        
+                        document.getElementById('status-text').textContent = 
+                            `First node selected: ${nodeId}. Now click a dark green node to complete your move.`;
+                        
+                        console.log('First node selected:', nodeId);
+                    } else {
+                        document.getElementById('status-text').textContent = 
+                            `Please click a light green node first to start your weaponmaster move.`;
+                    }
+                } else {
+                    // Second node selection
+                    if (this.nodes.find(n => n.id === nodeId)?.element.classList.contains('second-move')) {
+                        // Execute the complete weaponmaster move
+                        const movePath = `${this.firstNode}->${nodeId}`;
+                        console.log('Executing weaponmaster move:', movePath);
+                        
+                        // Reset weaponmaster state
+                        this.weaponmasterMode = false;
+                        this.firstNode = null;
+                        this.weaponmasterMoves = [];
+                        
+                        // Execute the move
+                        this.executeMove(this.selectedNode.getAttribute('data-id'), movePath);
+                    } else {
+                        document.getElementById('status-text').textContent = 
+                            `Please click a dark green node to complete your weaponmaster move.`;
+                    }
+                }
+            }
+            
+            showValidSecondMoves(firstNodeId) {
+                // Find all valid second nodes for the selected first node
+                const validSecondNodes = new Set();
+                
+                this.weaponmasterMoves.forEach(move => {
+                    if (move.includes('->')) {
+                        const [firstNode, secondNode] = move.split('->');
+                        if (firstNode === firstNodeId) {
+                            validSecondNodes.add(secondNode);
+                        }
+                    }
+                });
+                
+                // Highlight valid second nodes in dark green
+                validSecondNodes.forEach(nodeId => {
+                    const node = this.nodes.find(n => n.id === nodeId);
+                    if (node) {
+                        node.element.classList.add('second-move');
+                    }
+                });
+                
+                console.log('Valid second moves shown for', firstNodeId, ':', Array.from(validSecondNodes));
+            }
+            
+            cancelWeaponmasterMove() {
+                // Reset weaponmaster state
+                this.weaponmasterMode = false;
+                this.firstNode = null;
+                this.weaponmasterMoves = [];
+                
+                // Clear all indicators
+                this.clearLegalMoveIndicators();
+                
+                // Hide controls
+                document.getElementById('weaponmaster-controls').style.display = 'none';
+                
+                // Update status
+                document.getElementById('status-text').textContent = 'Weaponmaster move cancelled.';
+                
+                console.log('Weaponmaster move cancelled');
+            }
 
             clearLegalMoveIndicators() {
                 this.nodes.forEach(node => {
                     node.element.classList.remove('legal-move');
+                    node.element.classList.remove('first-move');
+                    node.element.classList.remove('second-move');
                 });
             }
 

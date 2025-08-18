@@ -200,12 +200,74 @@ def get_legal_moves_for_priestess(node_id, board_state, current_color):
     
     return list(legal_moves)
 
+def get_legal_moves_for_matron_mother(node_id, board_state, current_color):
+    """Calculate legal moves for a Matron Mother piece."""
+    legal_moves = set()
+    
+    # Get all neighboring nodes
+    neighbors = get_neighboring_nodes(node_id)
+    
+    for neighbor_id in neighbors:
+        # Skip if neighbor is occupied by own piece
+        if neighbor_id in board_state:
+            piece_name = board_state[neighbor_id]
+            if piece_name.startswith(current_color + '_'):
+                continue
+        
+        # Check if this move would put the king in check
+        # TODO: Implement check evaluation
+        # For now, allow all moves
+        is_in_check_after_move = False  # Placeholder for check evaluation
+        
+        if not is_in_check_after_move:
+            legal_moves.add(neighbor_id)
+    
+    return list(legal_moves)
+
+def get_legal_moves_for_weaponmaster(node_id, board_state, current_color):
+    """Calculate legal moves for a Weaponmaster piece."""
+    legal_moves = set()
+    
+    # Get all neighboring nodes for the first move
+    first_neighbors = get_neighboring_nodes(node_id)
+    
+    for first_neighbor_id in first_neighbors:
+        # Skip if first neighbor is occupied by own piece (can't move through friendly pieces)
+        if first_neighbor_id in board_state:
+            piece_name = board_state[first_neighbor_id]
+            if piece_name.startswith(current_color + '_'):
+                continue
+        
+        # Get neighbors of the first neighbor for the second move
+        second_neighbors = get_neighboring_nodes(first_neighbor_id)
+        for second_neighbor_id in second_neighbors:
+            # Skip if it's the original starting position (can't return to start)
+            if second_neighbor_id == node_id:
+                continue
+            
+            # Skip if occupied by own piece (can't move through friendly pieces on second move)
+            if second_neighbor_id in board_state:
+                piece_name = board_state[second_neighbor_id]
+                if piece_name.startswith(current_color + '_'):
+                    continue
+            
+            # Add the complete two-node path as a legal move
+            # Format: "first_node->second_node" to represent the complete move
+            move_path = f"{first_neighbor_id}->{second_neighbor_id}"
+            legal_moves.add(move_path)
+    
+    return list(legal_moves)
+
 def get_legal_moves(piece_name, node_id, board_state, current_color):
     """Get legal moves for any piece type."""
     if 'orc' in piece_name:
         return get_legal_moves_for_orc(node_id, board_state, current_color)
     elif 'priestess' in piece_name:
         return get_legal_moves_for_priestess(node_id, board_state, current_color)
+    elif 'matron mother' in piece_name:
+        return get_legal_moves_for_matron_mother(node_id, board_state, current_color)
+    elif 'weaponmaster' in piece_name:
+        return get_legal_moves_for_weaponmaster(node_id, board_state, current_color)
     else:
         # For other pieces, return all neighboring nodes (placeholder)
         neighbors = get_neighboring_nodes(node_id)
@@ -357,29 +419,80 @@ class Lobby:
         if to_node not in legal_moves:
             return False, "Illegal move"
         
-        # Execute the move
-        # Remove piece from source
-        del self.game_state['board'][from_node]
-        
-        # Check if this is a capture
-        captured_piece = None
-        if to_node in self.game_state['board']:
-            captured_piece = self.game_state['board'][to_node]
-            # Add to captured pieces list
-            self.game_state['captured_pieces'][player['color']].append(captured_piece)
-            print(f"Piece {captured_piece} captured by {player['color']} player")
-        
-        # Place piece at destination
-        self.game_state['board'][to_node] = piece_name
-        
-        # Update game state
-        self.game_state['last_move'] = {
-            'from': from_node,
-            'to': to_node,
-            'piece': piece_name,
-            'captured': captured_piece,
-            'player': player['color']
-        }
+        # Handle weaponmaster special movement (two-node path with potential captures)
+        captured_pieces = []
+        if 'weaponmaster' in piece_name and '->' in to_node:
+            # Parse the two-node path
+            nodes = to_node.split('->')
+            if len(nodes) == 2:
+                first_node, second_node = nodes
+                
+                # Check for captures on first node
+                if first_node in self.game_state['board']:
+                    captured_piece = self.game_state['board'][first_node]
+                    captured_pieces.append(captured_piece)
+                    self.game_state['captured_pieces'][player['color']].append(captured_piece)
+                    # Remove the captured piece from the board
+                    del self.game_state['board'][first_node]
+                    print(f"Piece {captured_piece} captured on first node by {player['color']} player")
+                
+                # Check for captures on second node
+                if second_node in self.game_state['board']:
+                    captured_piece = self.game_state['board'][second_node]
+                    captured_pieces.append(captured_piece)
+                    self.game_state['captured_pieces'][player['color']].append(captured_piece)
+                    # Remove the captured piece from the board
+                    del self.game_state['board'][second_node]
+                    print(f"Piece {captured_piece} captured on second node by {player['color']} player")
+                
+                # Remove piece from source and place at final destination
+                del self.game_state['board'][from_node]
+                self.game_state['board'][second_node] = piece_name
+                
+                # Update game state
+                self.game_state['last_move'] = {
+                    'from': from_node,
+                    'to': second_node,
+                    'intermediate_node': first_node,
+                    'piece': piece_name,
+                    'captured': captured_pieces,
+                    'player': player['color'],
+                    'move_type': 'weaponmaster_two_node'
+                }
+                
+                print(f"Weaponmaster move completed. Captured pieces: {captured_pieces}")
+                print(f"Total captured pieces for {player['color']}: {self.game_state['captured_pieces'][player['color']]}")
+                print(f"Board state after weaponmaster move: {self.game_state['board']}")
+            else:
+                return False, "Invalid weaponmaster move format"
+        else:
+            # Regular single-node move
+            # Remove piece from source
+            del self.game_state['board'][from_node]
+            
+            # Check if this is a capture
+            captured_piece = None
+            if to_node in self.game_state['board']:
+                captured_piece = self.game_state['board'][to_node]
+                # Add to captured pieces list
+                self.game_state['captured_pieces'][player['color']].append(captured_piece)
+                # Remove the captured piece from the board
+                del self.game_state['board'][to_node]
+                print(f"Piece {captured_piece} captured by {player['color']} player")
+                captured_pieces = [captured_piece]
+            
+            # Place piece at destination
+            self.game_state['board'][to_node] = piece_name
+            
+            # Update game state
+            self.game_state['last_move'] = {
+                'from': from_node,
+                'to': to_node,
+                'piece': piece_name,
+                'captured': captured_pieces,
+                'player': player['color'],
+                'move_type': 'single_node'
+            }
         
         # Switch turns
         self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
