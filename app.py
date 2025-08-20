@@ -258,6 +258,47 @@ def get_legal_moves_for_weaponmaster(node_id, board_state, current_color):
     
     return list(legal_moves)
 
+def get_legal_moves_for_wizard(node_id, board_state, current_color):
+    """Calculate legal moves for a Wizard piece."""
+    legal_moves = set()
+    
+    # Get all neighboring nodes for the first move
+    first_neighbors = get_neighboring_nodes(node_id)
+    
+    for first_neighbor_id in first_neighbors:
+        # Skip if first neighbor is the starting position
+        if first_neighbor_id == node_id:
+            continue
+            
+        # Wizard can move through any pieces (friendly or enemy) - no restrictions on first move
+        
+        # Get neighbors of the first neighbor for the second move
+        second_neighbors = get_neighboring_nodes(first_neighbor_id)
+        for second_neighbor_id in second_neighbors:
+            # Skip if it's the original starting position or duplicates the first node
+            if second_neighbor_id == node_id or second_neighbor_id == first_neighbor_id:
+                continue
+            
+            # Wizard can move through any pieces on second move too
+            
+            # Get neighbors of the second neighbor for the third move
+            third_neighbors = get_neighboring_nodes(second_neighbor_id)
+            for third_neighbor_id in third_neighbors:
+                # Skip if it's the original starting position or duplicates any previous node
+                if (third_neighbor_id == node_id or 
+                    third_neighbor_id == first_neighbor_id or 
+                    third_neighbor_id == second_neighbor_id):
+                    continue
+                
+                # Wizard can move through any pieces on third move too
+                
+                # Add the complete three-node path as a legal move
+                # Format: "first_node->second_node->third_node" to represent the complete move
+                move_path = f"{first_neighbor_id}->{second_neighbor_id}->{third_neighbor_id}"
+                legal_moves.add(move_path)
+    
+    return list(legal_moves)
+
 def get_legal_moves(piece_name, node_id, board_state, current_color):
     """Get legal moves for any piece type."""
     if 'orc' in piece_name:
@@ -268,6 +309,8 @@ def get_legal_moves(piece_name, node_id, board_state, current_color):
         return get_legal_moves_for_matron_mother(node_id, board_state, current_color)
     elif 'weaponmaster' in piece_name:
         return get_legal_moves_for_weaponmaster(node_id, board_state, current_color)
+    elif 'wizard' in piece_name:
+        return get_legal_moves_for_wizard(node_id, board_state, current_color)
     else:
         # For other pieces, return all neighboring nodes (placeholder)
         neighbors = get_neighboring_nodes(node_id)
@@ -416,6 +459,9 @@ class Lobby:
         
         # Verify the move is legal
         legal_moves = self.get_legal_moves_for_piece(from_node)
+        print(f"DEBUG: Move validation - from_node: {from_node}, to_node: {to_node}")
+        print(f"DEBUG: Legal moves: {legal_moves}")
+        print(f"DEBUG: to_node in legal_moves: {to_node in legal_moves}")
         if to_node not in legal_moves:
             return False, "Illegal move"
         
@@ -465,6 +511,47 @@ class Lobby:
                 print(f"Board state after weaponmaster move: {self.game_state['board']}")
             else:
                 return False, "Invalid weaponmaster move format"
+        elif 'wizard' in piece_name and '->' in to_node:
+            # Parse the three-node path
+            nodes = to_node.split('->')
+            if len(nodes) == 3:
+                first_node, second_node, third_node = nodes
+                
+                # Check if final destination is occupied by a friendly piece
+                if third_node in self.game_state['board']:
+                    final_piece = self.game_state['board'][third_node]
+                    if final_piece.startswith(player['color'] + '_'):
+                        return False, "Cannot end move on a friendly piece"
+                
+                # Check for captures only on final destination (third node)
+                if third_node in self.game_state['board']:
+                    captured_piece = self.game_state['board'][third_node]
+                    captured_pieces.append(captured_piece)
+                    self.game_state['captured_pieces'][player['color']].append(captured_piece)
+                    # Remove the captured piece from the board
+                    del self.game_state['board'][third_node]
+                    print(f"Piece {captured_piece} captured on final node by {player['color']} player")
+                
+                # Remove piece from source and place at final destination
+                del self.game_state['board'][from_node]
+                self.game_state['board'][third_node] = piece_name
+                
+                # Update game state
+                self.game_state['last_move'] = {
+                    'from': from_node,
+                    'to': third_node,
+                    'intermediate_nodes': [first_node, second_node],
+                    'piece': piece_name,
+                    'captured': captured_pieces,
+                    'player': player['color'],
+                    'move_type': 'wizard_three_node'
+                }
+                
+                print(f"Wizard three-node move completed. Captured pieces: {captured_pieces}")
+                print(f"Total captured pieces for {player['color']}: {self.game_state['captured_pieces'][player['color']]}")
+                print(f"Board state after wizard move: {self.game_state['board']}")
+            else:
+                return False, "Invalid wizard move format"
         else:
             # Regular single-node move
             # Remove piece from source

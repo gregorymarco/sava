@@ -427,6 +427,34 @@
             box-shadow: 0 0 15px rgba(46, 125, 50, 0.6);
             animation: pulse 1.5s infinite;
         }
+        
+        .node.wizard-move-3 {
+            background: #0d47a1;
+            border-color: #002171;
+            box-shadow: 0 0 15px rgba(13, 71, 161, 0.6);
+            animation: pulse 1.5s infinite;
+        }
+        
+        .node.wizard-first-move {
+            background: #e1f5fe;
+            border-color: #29b6f6;
+            box-shadow: 0 0 15px rgba(33, 150, 243, 0.6);
+            animation: pulse 1.5s infinite;
+        }
+        
+        .node.wizard-second-move {
+            background: #29b6f6;
+            border-color: #0277bd;
+            box-shadow: 0 0 15px rgba(33, 150, 243, 0.6);
+            animation: pulse 1.5s infinite;
+        }
+        
+        .node.wizard-third-move {
+            background: #01579b;
+            border-color: #002f6c;
+            box-shadow: 0 0 15px rgba(33, 150, 243, 0.6);
+            animation: pulse 1.5s infinite;
+        }
 
         .node.enemy-piece {
             cursor: not-allowed;
@@ -694,8 +722,10 @@
             // Update display
             updateLobbyDisplay();
             
-            // Update captured pieces display
-            updateCapturedPieces();
+            // Update captured pieces display (only if game has started)
+            if (lobby_info.game_state && lobby_info.game_state.game_started) {
+                updateCapturedPieces();
+            }
             
             // Handle specific events
             switch (event_type) {
@@ -846,8 +876,7 @@
 
         // Update captured pieces display
         function updateCapturedPieces() {
-            if (!lobbyState || !lobbyState.game_state.captured_pieces) return;
-            
+            if (!lobbyState || !lobbyState.game_state || !lobbyState.game_state.captured_pieces) return;            
             const redCaptured = document.getElementById('red-captured');
             const blueCaptured = document.getElementById('blue-captured');
             
@@ -897,6 +926,10 @@
                 this.weaponmasterMode = false;
                 this.firstNode = null;
                 this.weaponmasterMoves = [];
+                this.wizardMode = false;
+                this.wizardFirstNode = null;
+                this.wizardSecondNode = null;
+                this.wizardMoves = [];
                 this.initializeBoard();
             }
 
@@ -1068,6 +1101,12 @@
                     return;
                 }
                 
+                // Check if this is a wizard move
+                if (this.selectedNode && this.wizardMode && node.classList.contains('wizard-move-3')) {
+                    this.handleWizardMove(nodeId);
+                    return;
+                }
+                
                 // Clear previous legal move indicators
                 this.clearLegalMoveIndicators();
                 
@@ -1077,9 +1116,15 @@
                 }
                 
                 // Reset weaponmaster state when selecting a new piece
-                this.weaponmasterMode = false;
-                this.firstNode = null;
-                this.weaponmasterMoves = [];
+                if (this.selectedNode && this.selectedNode !== node) {
+                    this.weaponmasterMode = false;
+                    this.firstNode = null;
+                    this.weaponmasterMoves = [];
+                    
+                    // Reset wizard state when selecting a new piece
+                    this.wizardMode = false;
+                    this.wizardMoves = [];
+                }
                 
                 // Check if the clicked node has a piece and if it belongs to the current player
                 const boardState = lobbyState?.game_state?.board || {};
@@ -1140,6 +1185,14 @@
                             console.log('Weaponmaster piece selected:', pieceName);
                         }
                         
+                        // Check if this is a wizard piece
+                        if (pieceName.includes('wizard')) {
+                            this.wizardMode = true;
+                            document.getElementById('status-text').textContent = 
+                                `Wizard selected. Click any highlighted node to move there (all moves are exactly 3 nodes away).`;
+                            console.log('Wizard piece selected:', pieceName);
+                        }
+                        
                         this.getLegalMoves(nodeId);
                     } else {
                         // This is an enemy piece - don't select it
@@ -1196,6 +1249,12 @@
                             this.firstNode = null;
                             this.weaponmasterMoves = [];
                             document.getElementById('weaponmaster-controls').style.display = 'none';
+                        }
+                        
+                        // Reset wizard state if this was a wizard move
+                        if (this.wizardMode) {
+                            this.wizardMode = false;
+                            this.wizardMoves = [];
                         }
                         
                         // Update status
@@ -1287,6 +1346,12 @@
                             this.highlightWeaponmasterMoves(data.legal_moves);
                             document.getElementById('status-text').textContent = 
                                 `Weaponmaster moves available. Click a light green node to start your move.`;
+                        } else if (this.wizardMode) {
+                            // Store wizard moves for parsing
+                            this.wizardMoves = data.legal_moves;
+                            this.highlightWizardMoves(data.legal_moves);
+                            document.getElementById('status-text').textContent = 
+                                `Wizard moves available. Click any highlighted node to move there.`;
                         } else {
                             this.highlightLegalMoves(data.legal_moves);
                             document.getElementById('status-text').textContent = 
@@ -1342,6 +1407,33 @@
                 });
                 
                 console.log('Weaponmaster moves highlighted:', { firstNodes: Array.from(firstNodes), secondNodes: Array.from(secondNodes) });
+            }
+            
+            highlightWizardMoves(legalMoves) {
+                // Parse wizard moves - all moves should be three-node paths
+                const threeNodeMoves = new Set();
+                
+                legalMoves.forEach(move => {
+                    if (move.includes('->')) {
+                        const nodes = move.split('->');
+                        if (nodes.length === 3) {
+                            // Three-node path: highlight the final destination
+                            threeNodeMoves.add(nodes[2]);
+                        }
+                    }
+                });
+                
+                // Highlight three-node final destinations in dark blue
+                threeNodeMoves.forEach(nodeId => {
+                    const node = this.nodes.find(n => n.id === nodeId);
+                    if (node) {
+                        node.element.classList.add('wizard-move-3');
+                    }
+                });
+                
+                console.log('Wizard moves highlighted:', { 
+                    threeNodes: Array.from(threeNodeMoves) 
+                });
             }
             
             handleWeaponmasterMove(nodeId) {
@@ -1434,12 +1526,44 @@
                 
                 console.log('Weaponmaster move cancelled');
             }
+            
+            handleWizardMove(nodeId) {
+                // Find the three-node path to reach this destination
+                let movePath = null;
+                
+                // Check if this is a three-node move
+                this.wizardMoves.forEach(move => {
+                    if (move.includes('->')) {
+                        const nodes = move.split('->');
+                        if (nodes.length === 3 && nodes[2] === nodeId) {
+                            // Three-node path
+                            movePath = move;
+                        }
+                    }
+                });
+                
+                if (!movePath) {
+                    console.error('No valid three-node path found for wizard move');
+                    document.getElementById('status-text').textContent = 'Invalid wizard move path';
+                    return;
+                }
+                
+                console.log('Executing wizard move:', movePath);
+                
+                // Reset wizard state
+                this.wizardMode = false;
+                this.wizardMoves = [];
+                
+                // Execute the move
+                this.executeMove(this.selectedNode.getAttribute('data-id'), movePath);
+            }
 
             clearLegalMoveIndicators() {
                 this.nodes.forEach(node => {
                     node.element.classList.remove('legal-move');
                     node.element.classList.remove('first-move');
                     node.element.classList.remove('second-move');
+                    node.element.classList.remove('wizard-move-3');
                 });
             }
 
