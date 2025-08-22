@@ -322,7 +322,7 @@
         .game-board-container {
             background: #f8f9fa;
             border-radius: 15px;
-            padding: 1.5rem;
+            padding: 1rem;
             text-align: center;
             position: relative;
         }
@@ -373,11 +373,35 @@
         .game-board {
             position: relative;
             width: 100%;
-            height: 800px;
+            height: 600px;
             margin: 0 auto;
             background: white;
             border-radius: 10px;
             padding: 40px;
+            transition: all 0.3s ease;
+            min-height: 400px;
+            max-height: 800px;
+        }
+        
+        @media (max-width: 1200px) {
+            .game-board {
+                height: 500px;
+                padding: 30px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .game-board {
+                height: 400px;
+                padding: 20px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .game-board {
+                height: 350px;
+                padding: 15px;
+            }
         }
 
         .node {
@@ -394,6 +418,10 @@
             justify-content: center;
             font-size: 0.9rem;
             z-index: 10;
+            min-width: 16px;
+            min-height: 16px;
+            max-width: 40px;
+            max-height: 40px;
         }
 
         .node:hover {
@@ -930,7 +958,35 @@
                 this.wizardFirstNode = null;
                 this.wizardSecondNode = null;
                 this.wizardMoves = [];
+                
+                // Store initial dimensions for resize detection
+                this.lastWidth = window.innerWidth;
+                this.lastHeight = window.innerHeight;
+                
                 this.initializeBoard();
+                this.setupResizeDetection();
+            }
+
+            setupResizeDetection() {
+                window.addEventListener('resize', () => {
+                    this.onResize();
+                });
+            }
+
+            onResize() {
+                const currentWidth = window.innerWidth;
+                const currentHeight = window.innerHeight;
+
+                if (currentWidth !== this.lastWidth || currentHeight !== this.lastHeight) {
+                    console.log('Window resize detected:', {
+                        old: { width: this.lastWidth, height: this.lastHeight },
+                        new: { width: currentWidth, height: currentHeight }
+                    });
+                    
+                    this.lastWidth = currentWidth;
+                    this.lastHeight = currentHeight;
+                    this.initializeBoard(); // Re-initialize board to apply new scaling
+                }
             }
 
             initializeBoard() {
@@ -944,36 +1000,51 @@
                 this.centerX = boardWidth / 2;
                 this.centerY = boardHeight / 2;
                 
-                // Create center nodes (4 nodes in a square)
-                const centerOffset = GAME_CONFIG.board_scaling.center_offset;
+                // Calculate dynamic scaling factor based on window size
+                const baseWindowSize = 1200; // Reference window width
+                const scaleFactor = Math.max(0.6, Math.min(1.5, window.innerWidth / baseWindowSize));
+                
+                // Apply scaling to board dimensions
+                const scaledCenterOffset = GAME_CONFIG.board_scaling.center_offset * scaleFactor;
+                const scaledMaxRadius = Math.min(boardWidth, boardHeight) * GAME_CONFIG.board_scaling.max_radius_multiplier;
+                const scaledNodeSize = GAME_CONFIG.board_scaling.node_size * scaleFactor;
+                
+                // Create center nodes (4 nodes in a square) with scaled positioning
                 const centerPositions = [
-                    {x: this.centerX - centerOffset, y: this.centerY - centerOffset},
-                    {x: this.centerX + centerOffset, y: this.centerY - centerOffset},
-                    {x: this.centerX - centerOffset, y: this.centerY + centerOffset},
-                    {x: this.centerX + centerOffset, y: this.centerY + centerOffset}
+                    {x: this.centerX - scaledCenterOffset, y: this.centerY - scaledCenterOffset},
+                    {x: this.centerX + scaledCenterOffset, y: this.centerY - scaledCenterOffset},
+                    {x: this.centerX - scaledCenterOffset, y: this.centerY + scaledCenterOffset},
+                    {x: this.centerX + scaledCenterOffset, y: this.centerY + scaledCenterOffset}
                 ];
 
                 centerPositions.forEach((pos, index) => {
-                    this.createNode(pos.x, pos.y, `C${index}`, 'center');
+                    this.createNode(pos.x, pos.y, `C${index}`, 'center', scaledNodeSize);
                 });
 
-                // Create concentric rings
-                const maxRadius = Math.min(boardWidth, boardHeight) * GAME_CONFIG.board_scaling.max_radius_multiplier;
-                const ringRadii = GAME_CONFIG.board_scaling.ring_radius_ratios.map(ratio => maxRadius * ratio);
+                // Create concentric rings with scaled radii
+                const ringRadii = GAME_CONFIG.board_scaling.ring_radius_ratios.map(ratio => scaledMaxRadius * ratio);
                 ringRadii.forEach((radius, ringIndex) => {
-                    this.createRing(radius, ringIndex + 1);
+                    this.createRing(radius, ringIndex + 1, scaledNodeSize);
                 });
 
-                // Create connecting strands
-                this.createStrands();
+                // Create connecting strands with scaled dimensions
+                this.createStrands(scaleFactor);
             }
 
-            createNode(x, y, id, type) {
+            createNode(x, y, id, type, nodeSize) {
                 const node = document.createElement('div');
                 node.className = 'node';
-                const halfNodeSize = GAME_CONFIG.board_scaling.node_size / 2;
-                node.style.left = (x - halfNodeSize) + 'px';
-                node.style.top = (y - halfNodeSize) + 'px';
+                
+                // Apply scaled dimensions
+                node.style.width = nodeSize + 'px';
+                node.style.height = nodeSize + 'px';
+                node.style.fontSize = Math.max(0.6, Math.min(1.2, 0.8 * (nodeSize / 20))) + 'rem';
+                node.style.borderWidth = Math.max(1, Math.min(3, 2 * (nodeSize / 20))) + 'px';
+                
+                // Position with scaled offset
+                node.style.left = (x - nodeSize / 2) + 'px';
+                node.style.top = (y - nodeSize / 2) + 'px';
+                
                 node.setAttribute('data-id', id);
                 node.setAttribute('data-type', type);
                 node.setAttribute('data-x', x);
@@ -985,21 +1056,25 @@
                 this.nodes.push({id, x, y, type, element: node});
             }
 
-            createRing(radius, ringIndex) {
+            createRing(radius, ringIndex, nodeSize) {
                 const nodesPerRing = 16;
                 for (let i = 0; i < nodesPerRing; i++) {
                     const angle = (i * 2 * Math.PI) / nodesPerRing;
                     const x = this.centerX + radius * Math.cos(angle);
                     const y = this.centerY + radius * Math.sin(angle);
                     const id = `R${ringIndex}N${i}`;
-                    this.createNode(x, y, id, `ring${ringIndex}`);
+                    this.createNode(x, y, id, `ring${ringIndex}`, nodeSize);
                 }
             }
 
-            createStrands() {
+            createStrands(scaleFactor) {
                 // Ring strands (circular)
                 const maxRadius = Math.min(this.board.offsetWidth, this.board.offsetHeight) * GAME_CONFIG.board_scaling.max_radius_multiplier;
                 const ringRadii = GAME_CONFIG.board_scaling.ring_radius_ratios.map(ratio => maxRadius * ratio);
+                
+                // Apply scaled strand dimensions
+                const scaledStrandWidth = Math.max(1, Math.min(4, 2 * scaleFactor));
+                
                 ringRadii.forEach((radius, index) => {
                     const ringStrand = document.createElement('div');
                     ringStrand.className = 'strand ring';
@@ -1007,14 +1082,15 @@
                     ringStrand.style.top = (this.centerY - radius) + 'px';
                     ringStrand.style.width = (radius * 2) + 'px';
                     ringStrand.style.height = (radius * 2) + 'px';
+                    ringStrand.style.borderWidth = scaledStrandWidth + 'px';
                     this.board.appendChild(ringStrand);
                 });
 
                 // Additional connecting strands through specific nodes
-                this.createNodeConnections();
+                this.createNodeConnections(scaleFactor);
             }
 
-            createNodeConnections() {
+            createNodeConnections(scaleFactor) {
                 // Create SVG for curved strands
                 const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                 svg.setAttribute('width', this.board.offsetWidth);
@@ -1025,13 +1101,13 @@
                 svg.style.zIndex = '5';
                 this.board.appendChild(svg);
 
-                // Create strands using shared configuration
+                // Create strands using shared configuration with scaled stroke width
                 GAME_CONFIG.strand_definitions.forEach(strandDef => {
-                    this.createCurvedStrand(svg, strandDef.nodes, strandDef.direction);
+                    this.createCurvedStrand(svg, strandDef.nodes, strandDef.direction, scaleFactor);
                 });
             }
 
-            createCurvedStrand(svg, nodeIds, direction) {
+            createCurvedStrand(svg, nodeIds, direction, scaleFactor) {
                 const nodes = nodeIds.map(id => this.nodes.find(n => n.id === id)).filter(n => n);
                 
                 if (nodes.length < 2) return;
@@ -1065,7 +1141,7 @@
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 path.setAttribute('d', pathData);
                 path.setAttribute('stroke', '#333');
-                path.setAttribute('stroke-width', '2');
+                path.setAttribute('stroke-width', Math.max(1, Math.min(3, 2 * scaleFactor)) + 'px'); // Apply scaled stroke width
                 path.setAttribute('fill', 'none');
                 path.setAttribute('stroke-linecap', 'round');
                 path.setAttribute('stroke-linejoin', 'round');
