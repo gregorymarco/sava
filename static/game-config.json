@@ -54,6 +54,10 @@
         "max_players": 2,
         "auto_start_threshold": 2
     },
+    "development": {
+        "_comment": "Set enabled to false for production builds to hide all dev features",
+        "enabled": false
+    },
     "center_nodes": ["C0", "C1", "C2", "C3"],
     "initial_piece_placement": {
         "red_matron mother": "R3N12",

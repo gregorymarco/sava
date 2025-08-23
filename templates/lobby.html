@@ -681,6 +681,23 @@
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
         }
 
+        /* Development mode styles */
+        .dev-feature {
+            display: none;
+        }
+
+        .dev-mode .dev-feature {
+            display: block;
+        }
+
+        .dev-mode .dev-feature.inline {
+            display: inline-block;
+        }
+
+        .dev-mode .dev-feature.flex {
+            display: flex;
+        }
+
         @media (max-width: 768px) {
             .lobby-content {
                 grid-template-columns: 1fr;
@@ -701,8 +718,8 @@
                 <div class="lobby-header">
                     <div class="logo">♔♛</div>
                     <h1>Sava</h1>
-                    <h2>Game Lobby</h2>
-                    <div class="lobby-id" id="lobby-id">{{ lobby_id }}</div>
+                    <h2 class="dev-feature">Game Lobby</h2>
+                    <div class="lobby-id dev-feature inline" id="lobby-id">{{ lobby_id }}</div>
                 </div>
                 
                 <div class="nav-bar">
@@ -752,10 +769,18 @@
                     <!-- Game board will be created by JavaScript -->
                 </div>
                 
-                <!-- Weaponmaster move controls -->
-                <div id="weaponmaster-controls" style="display: none; margin-top: 1rem; text-align: center;">
-                    <button class="btn secondary" onclick="gameBoard.cancelWeaponmasterMove()">
-                        Cancel Weaponmaster Move
+                <!-- Game controls -->
+                <div style="margin-top: 1rem; text-align: center;">
+                    <!-- Weaponmaster move controls -->
+                    <div id="weaponmaster-controls" style="display: none; margin-bottom: 0.5rem;">
+                        <button class="btn secondary" onclick="gameBoard.cancelWeaponmasterMove()">
+                            Cancel Weaponmaster Move
+                        </button>
+                    </div>
+                    
+                    <!-- Board refresh button -->
+                    <button class="btn secondary dev-feature" id="refresh-board-btn" onclick="gameBoard.refreshBoard()" style="margin-top: 0.5rem;">
+                        🔄 Refresh Board
                     </button>
                 </div>
             </div>
@@ -974,10 +999,16 @@
                 lobbyState.players.forEach(player => {
                     const li = document.createElement('li');
                     li.className = 'player-item';
+                    // Prepare player display name
+                    let displayName = player.name;
+                    if (window.SHOW_PLAYER_IDS && player.id) {
+                        displayName += ` (${player.id.slice(-4)})`;
+                    }
+                    
                     li.innerHTML = `
                         <div class="player-avatar">${player.name.slice(0, 2).toUpperCase()}</div>
                         <div class="player-info">
-                            <div class="player-name">${player.name}</div>
+                            <div class="player-name">${displayName}</div>
                             <div class="player-role">${player.color} player</div>
                         </div>
                     `;
@@ -1100,18 +1131,87 @@
             }
 
             onResize() {
-                const currentWidth = window.innerWidth;
-                const currentHeight = window.innerHeight;
+                try {
+                    const currentWidth = window.innerWidth;
+                    const currentHeight = window.innerHeight;
 
-                if (currentWidth !== this.lastWidth || currentHeight !== this.lastHeight) {
-                    console.log('Window resize detected:', {
-                        old: { width: this.lastWidth, height: this.lastHeight },
-                        new: { width: currentWidth, height: currentHeight }
-                    });
-                    
-                    this.lastWidth = currentWidth;
-                    this.lastHeight = currentHeight;
-                    this.initializeBoard(); // Re-initialize board to apply new scaling
+                    if (currentWidth !== this.lastWidth || currentHeight !== this.lastHeight) {
+                        devLog('🔄 Window resize detected:', {
+                            old: { width: this.lastWidth, height: this.lastHeight },
+                            new: { width: currentWidth, height: currentHeight }
+                        });
+                        
+                        this.lastWidth = currentWidth;
+                        this.lastHeight = currentHeight;
+                        
+                        // Store current game state before reinitializing
+                        const currentBoardState = lobbyState?.game_state?.board || {};
+                        const currentSelection = this.selectedNode ? this.selectedNode.getAttribute('data-id') : null;
+                        const currentWeaponmasterMode = this.weaponmasterMode;
+                        const currentWizardMode = this.wizardMode;
+                        
+                        devLog('💾 Stored game state for restoration:', {
+                            boardState: currentBoardState,
+                            selection: currentSelection,
+                            weaponmasterMode: currentWeaponmasterMode,
+                            wizardMode: currentWizardMode
+                        });
+                        
+                        // Re-initialize board to apply new scaling
+                        this.initializeBoard();
+                        devLog('✅ Board reinitialized with new dimensions');
+                        
+                        // Restore game state after reinitializing
+                        if (Object.keys(currentBoardState).length > 0) {
+                            console.log('🔄 Restoring game state after resize:', currentBoardState);
+                            this.updateBoardWithPieces(currentBoardState);
+                            
+                            // Restore selection if there was one
+                            if (currentSelection) {
+                                const nodeToSelect = this.nodes.find(n => n.id === currentSelection);
+                                if (nodeToSelect) {
+                                    nodeToSelect.element.classList.add('selected');
+                                    this.selectedNode = nodeToSelect.element;
+                                    console.log('✅ Selection restored:', currentSelection);
+                                    
+                                    // Restore special move modes
+                                    if (currentWeaponmasterMode) {
+                                        this.weaponmasterMode = true;
+                                        this.getLegalMoves(currentSelection);
+                                        console.log('⚔️ Weaponmaster mode restored');
+                                    } else if (currentWizardMode) {
+                                        this.wizardMode = true;
+                                        this.getLegalMoves(currentSelection);
+                                        console.log('🔮 Wizard mode restored');
+                                    } else {
+                                        // Regular piece selection - get legal moves
+                                        this.getLegalMoves(currentSelection);
+                                        console.log('✅ Legal moves restored for regular piece');
+                                    }
+                                } else {
+                                    console.warn('⚠️ Could not restore selection - node not found:', currentSelection);
+                                }
+                            }
+                            
+                            // Ensure complete game state restoration
+                            setTimeout(() => {
+                                this.restoreGameStateAfterResize();
+                            }, 100); // Small delay to ensure DOM is ready
+                        } else {
+                            console.log('ℹ️ No game state to restore (game not started yet)');
+                        }
+                        
+                        console.log('✅ Resize handling completed successfully');
+                    }
+                } catch (error) {
+                    console.error('❌ Error during resize handling:', error);
+                    // Fallback: try to refresh the board completely
+                    try {
+                        console.log('🔄 Attempting fallback board refresh...');
+                        this.refreshBoard();
+                    } catch (fallbackError) {
+                        console.error('❌ Fallback refresh also failed:', fallbackError);
+                    }
                 }
             }
 
@@ -1175,7 +1275,14 @@
                 node.setAttribute('data-type', type);
                 node.setAttribute('data-x', x);
                 node.setAttribute('data-y', y);
-                node.textContent = id;
+                
+                // Only show node labels in development mode
+                if (GAME_CONFIG?.development?.enabled) {
+                    node.textContent = id;
+                } else {
+                    node.textContent = '';
+                }
+                
                 node.addEventListener('click', (e) => this.handleNodeClick(e));
                 
                 this.board.appendChild(node);
@@ -1775,7 +1882,12 @@
             updateBoardWithPieces(boardState) {
                 // Clear all existing pieces
                 this.nodes.forEach(node => {
+                                    // Only show node ID if in development mode
+                if (GAME_CONFIG?.development?.enabled) {
                     node.element.textContent = node.id;
+                } else {
+                    node.element.textContent = '';
+                }
                     node.element.style.background = '#fff';
                     node.element.style.borderColor = '#333';
                     node.element.classList.remove('enemy-piece');
@@ -1817,6 +1929,58 @@
             getPieceSymbol(pieceName) {
                 return GameLogic.getPieceSymbol(pieceName);
             }
+            
+            restoreGameStateAfterResize() {
+                // This method is called after resize to ensure all game state is properly restored
+                if (!lobbyState?.game_state?.board) return;
+                
+                console.log('Restoring complete game state after resize');
+                
+                // Update the board with current pieces
+                this.updateBoardWithPieces(lobbyState.game_state.board);
+                
+                // Update captured pieces display
+                updateCapturedPieces();
+                
+                // Update status text if game is over
+                if (lobbyState.game_state.game_over) {
+                    const gameData = {
+                        winner: lobbyState.game_state.winner,
+                        game_end_reason: lobbyState.game_state.game_end_reason
+                    };
+                    handleGameOver(gameData);
+                }
+            }
+            
+            refreshBoard() {
+                // Force a complete refresh of the board and game state
+                console.log('Force refreshing board and game state');
+                
+                // Store current state
+                const currentBoardState = lobbyState?.game_state?.board || {};
+                const currentSelection = this.selectedNode ? this.selectedNode.getAttribute('data-id') : null;
+                
+                // Reinitialize board
+                this.initializeBoard();
+                
+                // Restore game state
+                if (Object.keys(currentBoardState).length > 0) {
+                    this.updateBoardWithPieces(currentBoardState);
+                    
+                    // Restore selection
+                    if (currentSelection) {
+                        const nodeToSelect = this.nodes.find(n => n.id === currentSelection);
+                        if (nodeToSelect) {
+                            nodeToSelect.element.classList.add('selected');
+                            this.selectedNode = nodeToSelect.element;
+                            this.getLegalMoves(currentSelection);
+                        }
+                    }
+                }
+                
+                // Update captured pieces
+                updateCapturedPieces();
+            }
         }
 
         // Global function to get piece symbols (used by captured pieces display)
@@ -1856,8 +2020,143 @@
             }
         });
 
+        // Initialize development features based on config
+        function initializeDevelopmentFeatures() {
+            const isDevMode = GAME_CONFIG?.development?.enabled;
+            
+            if (!isDevMode) {
+                console.log('🏗️ Development mode disabled - hiding dev features');
+                document.body.classList.remove('dev-mode');
+                return;
+            }
+            
+            console.log('🔧 Development mode enabled - showing all dev features');
+            
+            // Enable development mode class for CSS styling
+            document.body.classList.add('dev-mode');
+            
+            // Enable all development features
+            window.DEV_LOGGING = true;
+            window.SHOW_PLAYER_IDS = true;
+            window.SHOW_COORDINATES = true;
+            
+            // Setup development shortcuts
+            setupDevelopmentShortcuts();
+            
+            console.log('✅ Development features initialized');
+        }
+
+        // Setup development keyboard shortcuts
+        function setupDevelopmentShortcuts() {
+            document.addEventListener('keydown', function(event) {
+                // Only in development mode and if not typing in an input
+                if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                    return;
+                }
+                
+                // Ctrl+R: Refresh board
+                if (event.ctrlKey && event.key === 'r') {
+                    event.preventDefault();
+                    if (gameBoard) {
+                        gameBoard.refreshBoard();
+                        console.log('🔄 Board refreshed via keyboard shortcut');
+                    }
+                }
+                
+                // Ctrl+D: Toggle detailed logging
+                if (event.ctrlKey && event.key === 'd') {
+                    event.preventDefault();
+                    window.DEV_LOGGING = !window.DEV_LOGGING;
+                    console.log('📋 Development logging toggled:', window.DEV_LOGGING);
+                }
+                
+                // Ctrl+L: Show lobby state
+                if (event.ctrlKey && event.key === 'l') {
+                    event.preventDefault();
+                    console.log('🏠 Current lobby state:', lobbyState);
+                }
+                
+                // Ctrl+Shift+D: Toggle development mode
+                if (event.ctrlKey && event.shiftKey && event.key === 'D') {
+                    event.preventDefault();
+                    toggleDevelopmentMode();
+                }
+            });
+            
+            console.log('⌨️ Development shortcuts enabled:');
+            console.log('  Ctrl+R: Refresh board');
+            console.log('  Ctrl+D: Toggle debug logging');
+            console.log('  Ctrl+L: Show lobby state');
+            console.log('  Ctrl+Shift+D: Toggle development mode');
+        }
+
+        // Enhanced logging function that respects dev settings
+        function devLog(message, ...args) {
+            if (window.DEV_LOGGING) {
+                console.log(message, ...args);
+            }
+        }
+
+        // Toggle development mode at runtime
+        function toggleDevelopmentMode() {
+            const isCurrentlyEnabled = document.body.classList.contains('dev-mode');
+            
+            if (isCurrentlyEnabled) {
+                document.body.classList.remove('dev-mode');
+                window.DEV_LOGGING = false;
+                window.SHOW_PLAYER_IDS = false;
+                window.SHOW_COORDINATES = false;
+                console.log('🏗️ Development mode disabled');
+            } else {
+                document.body.classList.add('dev-mode');
+                window.DEV_LOGGING = true;
+                window.SHOW_PLAYER_IDS = true;
+                console.log('🔧 Development mode enabled');
+                
+                // Refresh the board to update node labels
+                if (gameBoard) {
+                    gameBoard.refreshBoard();
+                }
+                
+                // Update player display
+                updateLobbyDisplay();
+            }
+        }
+        
+        // Console helper functions for development (available globally)
+        window.devMode = {
+            toggle: toggleDevelopmentMode,
+            enable: () => {
+                document.body.classList.add('dev-mode');
+                window.DEV_LOGGING = true;
+                window.SHOW_PLAYER_IDS = true;
+                console.log('🔧 Development mode enabled via console');
+                if (gameBoard) gameBoard.refreshBoard();
+                updateLobbyDisplay();
+            },
+            disable: () => {
+                document.body.classList.remove('dev-mode');
+                window.DEV_LOGGING = false;
+                window.SHOW_PLAYER_IDS = false;
+                window.SHOW_COORDINATES = false;
+                console.log('🏗️ Development mode disabled via console');
+                if (gameBoard) gameBoard.refreshBoard();
+                updateLobbyDisplay();
+            },
+            refresh: () => {
+                if (gameBoard) gameBoard.refreshBoard();
+                console.log('🔄 Board refreshed via console');
+            },
+            state: () => {
+                console.log('🏠 Current lobby state:', lobbyState);
+            }
+        };
+
         // Initialize when page loads
-        document.addEventListener('DOMContentLoaded', initializeLobby);
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeDevelopmentFeatures();
+            initializeLobby();
+        });
 
         // Game over handling functions
         function handleGameOver(gameData) {
