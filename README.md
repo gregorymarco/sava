@@ -21,14 +21,11 @@ http://localhost:5000
 
 ## Current Status
 
-- 🔄 In dev
+- ~~🔄 In dev~~
+- 🎉 Prototype! A fully legal game can be played over the board.
 
 ## TODOs
 
-- Game piece Logic
-    - Wizards
-    - Matron Mother
-- Forced-move checks
 - UI facelift with appropriate assets
 - Harden game logic against refreshes/disconnects
 - Turn timers
