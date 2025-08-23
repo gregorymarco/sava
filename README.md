@@ -26,12 +26,15 @@ http://localhost:5000
 
 ## TODOs
 
+Most important:
+- Add spider dice!
 - UI facelift with appropriate assets
 - Harden game logic against refreshes/disconnects
-- Turn timers
+- Turn timers/chess clock
 - Chat window
-- Matchmaking/lobby placement 
 
+Next steps:
+- Matchmaking/lobby placement 
 - Stored game/account state 
     - Match history
     - Elo
