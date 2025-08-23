@@ -165,10 +165,15 @@ def get_legal_moves_for_priestess(node_id, board_state, current_color):
     # For each path, calculate legal moves along that path
     for path in paths:
         current_idx = path.index(node_id)
+        path_length = len(path)
+        
+        # For rings, we need to handle the circular nature
+        is_ring = path[0].startswith('R')
         
         # Check moves in the positive direction
-        for i in range(current_idx + 1, len(path)):
-            target_node = path[i]
+        for i in range(1, path_length):
+            target_idx = (current_idx + i) % path_length
+            target_node = path[target_idx]
             
             # If there's a piece at this node, we can't move past it
             if target_node in board_state:
@@ -183,8 +188,9 @@ def get_legal_moves_for_priestess(node_id, board_state, current_color):
                 legal_moves.add(target_node)
         
         # Check moves in the negative direction
-        for i in range(current_idx - 1, -1, -1):
-            target_node = path[i]
+        for i in range(1, path_length):
+            target_idx = (current_idx - i) % path_length
+            target_node = path[target_idx]
             
             # If there's a piece at this node, we can't move past it
             if target_node in board_state:
@@ -443,7 +449,23 @@ class Lobby:
         if current_color != self.game_state['current_turn']:
             return []
         
-        return get_legal_moves(piece_name, node_id, self.game_state['board'], current_color)
+        # Get basic legal moves
+        basic_legal_moves = get_legal_moves(piece_name, node_id, self.game_state['board'], current_color)
+        
+        # If the player is in check, filter moves to only include those that resolve the check
+        if self._is_player_in_check(current_color):
+            resolving_moves = []
+            for move in basic_legal_moves:
+                if self._does_move_resolve_check(node_id, move, piece_name, current_color):
+                    resolving_moves.append(move)
+            return resolving_moves
+        
+        # If not in check, filter out moves that would put the player in check
+        safe_moves = []
+        for move in basic_legal_moves:
+            if self._is_move_safe_for_matron_mother(node_id, move, piece_name, current_color):
+                safe_moves.append(move)
+        return safe_moves
 
     def execute_move(self, from_node, to_node, player_id):
         """Execute a move and notify all players."""
@@ -464,6 +486,16 @@ class Lobby:
         print(f"DEBUG: to_node in legal_moves: {to_node in legal_moves}")
         if to_node not in legal_moves:
             return False, "Illegal move"
+        
+        # Check if the player is currently in check
+        if self._is_player_in_check(player['color']):
+            # If in check, the move must resolve the check
+            if not self._does_move_resolve_check(from_node, to_node, piece_name, player['color']):
+                return False, "You are in check! You must make a move that resolves the check"
+        else:
+            # If not in check, check if this move would put the player's own Matron Mother in check
+            if not self._is_move_safe_for_matron_mother(from_node, to_node, piece_name, player['color']):
+                return False, "This move would put your Matron Mother in check"
         
         # Handle weaponmaster special movement (two-node path with potential captures)
         captured_pieces = []
@@ -584,10 +616,243 @@ class Lobby:
         # Switch turns
         self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
         
+        # Check if the next player is in check
+        next_player_color = self.game_state['current_turn']
+        if self._is_player_in_check(next_player_color):
+            print(f"⚠️  {next_player_color.upper()} player is in CHECK!")
+            print(f"🎯 {next_player_color} player must make a move that resolves the check")
+            
+            # Check if they have any legal moves
+            if not self._does_player_have_legal_moves(next_player_color):
+                print(f"🚨 {next_player_color.upper()} player has NO LEGAL MOVES while in check!")
+        
+        # Check if the next player is in checkmate
+        if self._is_player_in_checkmate(next_player_color):
+            # Game over - the player who just moved wins
+            winner_color = player['color']
+            self.game_state['game_over'] = True
+            self.game_state['winner'] = winner_color
+            self.game_state['game_end_reason'] = 'checkmate'
+            print(f"🎉 CHECKMATE! {winner_color.upper()} player wins by checkmate!")
+            print(f"🏆 Winner: {winner_color}")
+            print(f"💀 Loser: {next_player_color}")
+            print(f"🎮 Game ended due to checkmate")
+            print(f"📊 Final board state: {self.game_state['board']}")
+        elif not self._does_player_have_legal_moves(next_player_color):
+            # Stalemate - no legal moves but not in check (player who can't move loses)
+            winner_color = player['color']  # The player who just moved wins
+            self.game_state['game_over'] = True
+            self.game_state['winner'] = winner_color
+            self.game_state['game_end_reason'] = 'stalemate'
+            print(f"🎯 STALEMATE! {next_player_color} player has no legal moves but is not in check")
+            print(f"🏆 Winner: {winner_color} (opponent has no legal moves)")
+            print(f"💀 Loser: {next_player_color} (no legal moves available)")
+            print(f"🎮 Game ended due to stalemate - {winner_color} wins!")
+            print(f"📊 Final board state: {self.game_state['board']}")
+        
         # Notify all players about the move
         notify_lobby_update(self.lobby_id, 'piece_moved', self.game_state)
         
+        # If game is over, send a separate game_over event
+        if self.game_state.get('game_over'):
+            notify_lobby_update(self.lobby_id, 'game_over', {
+                'winner': self.game_state.get('winner'),
+                'game_end_reason': self.game_state.get('game_end_reason'),
+                'final_board': self.game_state['board']
+            })
+        
         return True, self.game_state
+    
+    def _is_move_safe_for_matron_mother(self, from_node, to_node, piece_name, player_color):
+        """Check if a move would put the player's own Matron Mother in check."""
+        # Create a temporary board state to simulate the move
+        temp_board = self.game_state['board'].copy()
+        
+        # Handle special moves (weaponmaster, wizard)
+        if '->' in to_node:
+            nodes = to_node.split('->')
+            if 'weaponmaster' in piece_name and len(nodes) == 2:
+                # Weaponmaster move - remove piece from start, place at end
+                del temp_board[from_node]
+                temp_board[nodes[1]] = piece_name
+                # Remove any captured pieces
+                if nodes[0] in temp_board:
+                    del temp_board[nodes[0]]
+                if nodes[1] in temp_board:
+                    del temp_board[nodes[1]]
+                temp_board[nodes[1]] = piece_name
+            elif 'wizard' in piece_name and len(nodes) == 3:
+                # Wizard move - remove piece from start, place at end
+                del temp_board[from_node]
+                temp_board[nodes[2]] = piece_name
+                # Remove any captured pieces
+                if nodes[2] in temp_board:
+                    del temp_board[nodes[2]]
+                temp_board[nodes[2]] = piece_name
+        else:
+            # Regular move
+            del temp_board[from_node]
+            temp_board[to_node] = piece_name
+        
+        # Find the matron mother's position after the move
+        matron_mother_node = None
+        for node, piece in temp_board.items():
+            if piece == f"{player_color}_matron mother":
+                matron_mother_node = node
+                break
+        
+        if not matron_mother_node:
+            # Matron Mother not found - this shouldn't happen in a valid game
+            return False
+        
+        # Check if any enemy piece can capture the matron mother
+        enemy_color = 'blue' if player_color == 'red' else 'red'
+        for node, piece in temp_board.items():
+            if piece.startswith(enemy_color + '_'):
+                # Get all possible moves for this enemy piece
+                legal_moves = get_legal_moves(piece, node, temp_board, enemy_color)
+                
+                # Check if any of these moves would capture the matron mother
+                if matron_mother_node in legal_moves:
+                    return False
+        
+        return True
+    
+    def _is_player_in_check(self, player_color):
+        """Check if a player is currently in check."""
+        # Find the player's Matron Mother
+        matron_mother_node = None
+        for node, piece in self.game_state['board'].items():
+            if piece == f"{player_color}_matron mother":
+                matron_mother_node = node
+                break
+        
+        if not matron_mother_node:
+            # Matron Mother not found - this shouldn't happen in a valid game
+            return False
+        
+        # Check if any enemy piece can capture the Matron Mother
+        enemy_color = 'blue' if player_color == 'red' else 'red'
+        for node, piece in self.game_state['board'].items():
+            if piece.startswith(enemy_color + '_'):
+                # Get all possible moves for this enemy piece
+                legal_moves = get_legal_moves(piece, node, self.game_state['board'], enemy_color)
+                
+                # Check if any of these moves would capture the Matron Mother
+                if matron_mother_node in legal_moves:
+                    return True
+        
+        return False
+    
+    def _does_move_resolve_check(self, from_node, to_node, piece_name, player_color):
+        """Check if a move resolves the current check."""
+        # Create a temporary board state to simulate the move
+        temp_board = self.game_state['board'].copy()
+        
+        # Handle special moves (weaponmaster, wizard)
+        if '->' in to_node:
+            nodes = to_node.split('->')
+            if 'weaponmaster' in piece_name and len(nodes) == 2:
+                # Weaponmaster move - remove piece from start, place at end
+                del temp_board[from_node]
+                temp_board[nodes[1]] = piece_name
+                # Remove any captured pieces
+                if nodes[0] in temp_board:
+                    del temp_board[nodes[0]]
+                if nodes[1] in temp_board:
+                    del temp_board[nodes[1]]
+                temp_board[nodes[1]] = piece_name
+            elif 'wizard' in piece_name and len(nodes) == 3:
+                # Wizard move - remove piece from start, place at end
+                del temp_board[from_node]
+                temp_board[nodes[2]] = piece_name
+                # Remove any captured pieces
+                if nodes[2] in temp_board:
+                    del temp_board[nodes[2]]
+                temp_board[nodes[2]] = piece_name
+        else:
+            # Regular move
+            del temp_board[from_node]
+            temp_board[to_node] = piece_name
+        
+        # Find the matron mother's position after the move
+        matron_mother_node = None
+        for node, piece in temp_board.items():
+            if piece == f"{player_color}_matron mother":
+                matron_mother_node = node
+                break
+        
+        if not matron_mother_node:
+            # Matron Mother not found - this shouldn't happen in a valid game
+            return False
+        
+        # Check if any enemy piece can still capture the Matron Mother after the move
+        enemy_color = 'blue' if player_color == 'red' else 'red'
+        for node, piece in temp_board.items():
+            if piece.startswith(enemy_color + '_'):
+                # Get all possible moves for this enemy piece
+                legal_moves = get_legal_moves(piece, node, temp_board, enemy_color)
+                
+                # Check if any of these moves would capture the Matron Mother
+                if matron_mother_node in legal_moves:
+                    return False
+        
+        return True
+    
+    def _is_player_in_checkmate(self, player_color):
+        """Check if a player is in checkmate (in check with no legal moves)."""
+        if not self._is_player_in_check(player_color):
+            return False
+        
+        # Check if any piece of this color has any legal moves that resolve the check
+        for node_id, piece_name in self.game_state['board'].items():
+            if piece_name.startswith(player_color + '_'):
+                # Get basic legal moves for this piece
+                basic_legal_moves = get_legal_moves(piece_name, node_id, self.game_state['board'], player_color)
+                
+                # Check if any of these moves resolve the check
+                for move in basic_legal_moves:
+                    if self._does_move_resolve_check(node_id, move, piece_name, player_color):
+                        return False
+        
+        return True
+    
+    def _does_player_have_legal_moves(self, player_color):
+        """Check if a player has any legal moves available."""
+        print(f"🔍 Checking legal moves for {player_color} player...")
+        total_basic_moves = 0
+        total_legal_moves = 0
+        
+        for node_id, piece_name in self.game_state['board'].items():
+            if piece_name.startswith(player_color + '_'):
+                # Get basic legal moves for this piece
+                basic_legal_moves = get_legal_moves(piece_name, node_id, self.game_state['board'], player_color)
+                total_basic_moves += len(basic_legal_moves)
+                
+                if basic_legal_moves:
+                    print(f"  📍 {piece_name} at {node_id}: {len(basic_legal_moves)} basic moves")
+                
+                # If not in check, filter out moves that would put own Matron Mother in check
+                if not self._is_player_in_check(player_color):
+                    for move in basic_legal_moves:
+                        if self._is_move_safe_for_matron_mother(node_id, move, piece_name, player_color):
+                            total_legal_moves += 1
+                            print(f"    ✅ Legal move: {node_id} -> {move}")
+                            return True
+                        else:
+                            print(f"    ❌ Move blocked (would put Matron Mother in check): {node_id} -> {move}")
+                else:
+                    # If in check, check if any move resolves the check
+                    for move in basic_legal_moves:
+                        if self._does_move_resolve_check(node_id, move, piece_name, player_color):
+                            total_legal_moves += 1
+                            print(f"    ✅ Legal move (resolves check): {node_id} -> {move}")
+                            return True
+                        else:
+                            print(f"    ❌ Move blocked (doesn't resolve check): {node_id} -> {move}")
+        
+        print(f"📊 {player_color} player: {total_basic_moves} basic moves, {total_legal_moves} legal moves")
+        return False
 
 # WebSocket event handlers
 @socketio.on('connect')
@@ -771,6 +1036,62 @@ def move_piece_api(lobby_id):
         })
     else:
         return jsonify({'error': result}), 400
+
+@app.route('/api/lobby/<lobby_id>/check-status', methods=['GET'])
+def check_status_api(lobby_id):
+    """Check if the current player is in check."""
+    if lobby_id not in lobbies:
+        return jsonify({'error': 'Lobby not found'}), 404
+    
+    lobby = lobbies[lobby_id]
+    
+    # Check if game is started
+    if not lobby.game_state['game_started']:
+        return jsonify({'error': 'Game not started'}), 400
+    
+    # Get current turn
+    current_turn = lobby.game_state['current_turn']
+    
+    # Check if current player is in check
+    is_in_check = lobby._is_player_in_check(current_turn)
+    
+    return jsonify({
+        'current_turn': current_turn,
+        'is_in_check': is_in_check
+    })
+
+@app.route('/api/lobby/<lobby_id>/check-move', methods=['POST'])
+def check_move_api(lobby_id):
+    """Check if a move would result in check for the Matron Mother."""
+    if lobby_id not in lobbies:
+        return jsonify({'error': 'Lobby not found'}), 404
+    
+    data = request.get_json()
+    board_state = data.get('board_state', {})
+    target_node = data.get('target_node')
+    enemy_color = data.get('enemy_color')
+    
+    if not target_node or not enemy_color:
+        return jsonify({'error': 'Missing required parameters'}), 400
+    
+    # Check if any enemy piece can capture the target node (Matron Mother)
+    for node_id, piece_name in board_state.items():
+        if piece_name.startswith(enemy_color + '_'):
+            # Get all possible moves for this enemy piece
+            legal_moves = get_legal_moves(piece_name, node_id, board_state, enemy_color)
+            
+            # Check if any of these moves would capture the target
+            if target_node in legal_moves:
+                return jsonify({
+                    'would_result_in_check': True,
+                    'threatening_piece': piece_name,
+                    'threatening_node': node_id,
+                    'target_node': target_node
+                })
+    
+    return jsonify({
+        'would_result_in_check': False
+    })
 
 @app.route('/api/lobby/<lobby_id>/update-state', methods=['POST'])
 def update_game_state(lobby_id):

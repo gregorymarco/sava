@@ -6,6 +6,7 @@
     <title>Sava - Lobby</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="/static/js/game-config.js"></script>
     <style>
         * {
@@ -596,6 +597,90 @@
             background: #5a6fd8;
         }
 
+        /* Rain effect styles */
+        .rain-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 9999;
+            overflow: hidden;
+        }
+
+        .raindrop {
+            position: absolute;
+            width: 2px;
+            height: 20px;
+            background: linear-gradient(to bottom, transparent, #4a90e2);
+            animation: fall linear infinite;
+        }
+
+        @keyframes fall {
+            0% {
+                transform: translateY(-100vh);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh);
+                opacity: 0;
+            }
+        }
+
+        /* Game over overlay */
+        .game-over-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 2rem;
+            text-align: center;
+        }
+
+        .game-over-content {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .game-over-title {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .game-over-message {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+
+        .game-over-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .game-over-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
         @media (max-width: 768px) {
             .lobby-content {
                 grid-template-columns: 1fr;
@@ -674,6 +759,18 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Rain effect container -->
+    <div class="rain-container" id="rain-container"></div>
+    
+    <!-- Game over overlay -->
+    <div class="game-over-overlay" id="game-over-overlay">
+        <div class="game-over-content">
+            <div class="game-over-title" id="game-over-title">Game Over</div>
+            <div class="game-over-message" id="game-over-message">The game has ended</div>
+            <button class="game-over-btn" onclick="closeGameOverOverlay()">Close</button>
         </div>
     </div>
 
@@ -779,19 +876,24 @@
                 updateCapturedPieces();
             }
             
-            // Handle specific events
-            switch (event_type) {
-                case 'game_started':
-                    console.log('Game started via WebSocket');
-                    if (gameBoard && lobby_info.game_state.board) {
-                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
-                    }
-                    const currentTurn = lobby_info.game_state.current_turn;
-                    document.getElementById('status-text').textContent = 
-                        `Game in progress - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
-                    document.getElementById('status-indicator').className = 'status-indicator status-playing';
-                    document.getElementById('start-game-btn').disabled = true;
-                    break;
+                    // Handle specific events
+        switch (event_type) {
+            case 'game_started':
+                console.log('Game started via WebSocket');
+                if (gameBoard && lobby_info.game_state.board) {
+                    gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
+                }
+                const currentTurn = lobby_info.game_state.current_turn;
+                document.getElementById('status-text').textContent = 
+                    `Game in progress - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
+                document.getElementById('status-indicator').className = 'status-indicator status-playing';
+                document.getElementById('start-game-btn').disabled = true;
+                break;
+                
+            case 'game_over':
+                console.log('Game over via WebSocket:', eventData);
+                handleGameOver(eventData);
+                break;
                     
                 case 'piece_moved':
                     console.log('Piece moved via WebSocket');
@@ -1190,7 +1292,7 @@
                 // Check if this is a legal move for a previously selected piece
                 if (this.selectedNode && node.classList.contains('legal-move')) {
                     // Regular piece move
-                    this.executeMove(this.selectedNode.getAttribute('data-id'), nodeId);
+                    this.executeMove(this.selectedNode.getAttribute('data-id'), nodeId, playerId);
                     return;
                 }
                 
@@ -1311,7 +1413,7 @@
                 console.log('=== END DEBUG ===');
             }
 
-            async executeMove(fromNode, toNode) {
+            async executeMove(fromNode, toNode, playerId) {
                 try {
                     const lobbyId = document.getElementById('lobby-id').textContent;
                     console.log('Executing move:', { fromNode, toNode, playerId });
@@ -1375,11 +1477,11 @@
                             const currentTurn = data.game_state.current_turn;
                             statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
                             
-                            document.getElementById('status-text').textContent = statusText;
+                            document.getElementById('status-text').innerHTML = statusText;
                         } else {
                             // Fallback status update
                             const currentTurn = data.game_state.current_turn;
-                            document.getElementById('status-text').textContent = 
+                            document.getElementById('status-text').innerHTML = 
                                 `Move completed. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
                         }
                         
@@ -1389,13 +1491,17 @@
                         // Force update of captured pieces display
                         updateCapturedPieces();
                     } else {
-                        document.getElementById('status-text').textContent = 'Move failed: ' + (data.error || 'Unknown error');
+                        document.getElementById('status-text').innerHTML = '<strong>Move failed:</strong> ' + (data.error || 'Unknown error');
                     }
                 } catch (error) {
                     console.error('Failed to execute move:', error);
-                    document.getElementById('status-text').textContent = 'Failed to execute move. Please try again.';
+                    document.getElementById('status-text').innerHTML = '<strong>Failed to execute move.</strong> Please try again.';
                 }
             }
+            
+
+            
+
 
             async getLegalMoves(nodeId) {
                 try {
@@ -1576,7 +1682,7 @@
                         this.weaponmasterMoves = [];
                         
                         // Execute the move
-                        this.executeMove(this.selectedNode.getAttribute('data-id'), movePath);
+                        this.executeMove(this.selectedNode.getAttribute('data-id'), movePath, playerId);
                     } else {
                         document.getElementById('status-text').textContent = 
                             `Please click a dark green node to complete your weaponmaster move.`;
@@ -1654,7 +1760,7 @@
                 this.wizardMoves = [];
                 
                 // Execute the move
-                this.executeMove(this.selectedNode.getAttribute('data-id'), movePath);
+                this.executeMove(this.selectedNode.getAttribute('data-id'), movePath, playerId);
             }
 
             clearLegalMoveIndicators() {
@@ -1752,6 +1858,140 @@
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', initializeLobby);
+
+        // Game over handling functions
+        function handleGameOver(gameData) {
+            const { winner, game_end_reason } = gameData;
+            const currentPlayer = lobbyState?.players.find(p => p.id === playerId);
+            
+            if (!currentPlayer) return;
+            
+            const isWinner = winner === currentPlayer.color;
+            const isLoser = winner && winner !== currentPlayer.color;
+            
+            // Update status text
+            let statusText = '';
+            if (game_end_reason === 'checkmate') {
+                if (isWinner) {
+                    statusText = `🎉 CHECKMATE! You win!`;
+                } else if (isLoser) {
+                    statusText = `💀 CHECKMATE! You lose!`;
+                } else {
+                    statusText = `🎉 CHECKMATE! ${winner} player wins!`;
+                }
+            } else if (game_end_reason === 'stalemate') {
+                if (isWinner) {
+                    statusText = `🎯 STALEMATE! You win! (Opponent has no legal moves)`;
+                } else if (isLoser) {
+                    statusText = `💀 STALEMATE! You lose! (No legal moves available)`;
+                } else {
+                    statusText = `🎯 STALEMATE! ${winner} player wins!`;
+                }
+            }
+            
+            document.getElementById('status-text').innerHTML = statusText;
+            
+            // Show game over overlay
+            showGameOverOverlay(gameData);
+            
+            // Trigger visual effects
+            if (isWinner) {
+                triggerConfetti();
+            } else if (isLoser) {
+                triggerRain();
+            }
+        }
+
+        function showGameOverOverlay(gameData) {
+            const { winner, game_end_reason } = gameData;
+            const currentPlayer = lobbyState?.players.find(p => p.id === playerId);
+            
+            let title = 'Game Over';
+            let message = 'The game has ended';
+            
+            if (game_end_reason === 'checkmate') {
+                if (winner === currentPlayer?.color) {
+                    title = '🎉 VICTORY!';
+                    message = 'Congratulations! You won by checkmate!';
+                } else if (winner) {
+                    title = '💀 DEFEAT!';
+                    message = `You lost by checkmate. ${winner} player wins!`;
+                }
+            } else if (game_end_reason === 'stalemate') {
+                if (winner === currentPlayer?.color) {
+                    title = '🎯 VICTORY!';
+                    message = 'Congratulations! You won by stalemate! Your opponent had no legal moves.';
+                } else if (winner) {
+                    title = '💀 DEFEAT!';
+                    message = `You lost by stalemate. You had no legal moves available. ${winner} player wins!`;
+                } else {
+                    title = '🎯 STALEMATE!';
+                    message = `Game ended by stalemate. ${winner} player wins!`;
+                }
+            }
+            
+            document.getElementById('game-over-title').textContent = title;
+            document.getElementById('game-over-message').textContent = message;
+            document.getElementById('game-over-overlay').style.display = 'flex';
+        }
+
+        function closeGameOverOverlay() {
+            document.getElementById('game-over-overlay').style.display = 'none';
+        }
+
+        function triggerConfetti() {
+            // Create confetti effect
+            const duration = 3000;
+            const animationEnd = Date.now() + duration;
+            const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+            function randomInRange(min, max) {
+                return Math.random() * (max - min) + min;
+            }
+
+            const interval = setInterval(function() {
+                const timeLeft = animationEnd - Date.now();
+
+                if (timeLeft <= 0) {
+                    return clearInterval(interval);
+                }
+
+                const particleCount = 50 * (timeLeft / duration);
+                
+                // Create confetti
+                confetti(Object.assign({}, defaults, {
+                    particleCount,
+                    origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+                }));
+                confetti(Object.assign({}, defaults, {
+                    particleCount,
+                    origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+                }));
+            }, 250);
+        }
+
+        function triggerRain() {
+            const rainContainer = document.getElementById('rain-container');
+            const raindropCount = 100;
+            
+            // Clear existing raindrops
+            rainContainer.innerHTML = '';
+            
+            // Create raindrops
+            for (let i = 0; i < raindropCount; i++) {
+                const raindrop = document.createElement('div');
+                raindrop.className = 'raindrop';
+                raindrop.style.left = Math.random() * 100 + 'vw';
+                raindrop.style.animationDelay = Math.random() * 2 + 's';
+                raindrop.style.animationDuration = (Math.random() * 1 + 1) + 's';
+                rainContainer.appendChild(raindrop);
+            }
+            
+            // Stop rain after 5 seconds
+            setTimeout(() => {
+                rainContainer.innerHTML = '';
+            }, 5000);
+        }
 
         // Rules sidebar functions
         async function openRulesSidebar() {
