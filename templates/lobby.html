@@ -19,24 +19,152 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 1rem 0;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
         }
 
         .container {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            padding: 1rem;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            max-width: 1400px;
-            width: 98%;
-            margin: 0 auto;
+            background: transparent;
+            border-radius: 0;
+            padding: 0;
+            box-shadow: none;
+            max-width: none;
+            width: 100%;
+            margin: 0;
+            min-height: 100vh;
         }
 
         .lobby-content {
             display: grid;
             grid-template-columns: 280px 1fr;
-            gap: 1rem;
-            align-items: start;
+            gap: 0;
+            align-items: stretch;
+            position: relative;
+            min-height: 100vh;
+            transition: grid-template-columns 0.3s ease;
+        }
+
+        /* Hamburger menu button */
+        .hamburger-menu {
+            display: block;
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 1001;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .hamburger-menu:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .hamburger-menu .bar {
+            width: 20px;
+            height: 2px;
+            background: white;
+            margin: 4px 0;
+            transition: 0.3s;
+            border-radius: 1px;
+        }
+
+        .hamburger-menu.active .bar:nth-child(1) {
+            transform: rotate(-45deg) translate(-5px, 6px);
+        }
+
+        .hamburger-menu.active .bar:nth-child(2) {
+            opacity: 0;
+        }
+
+        .hamburger-menu.active .bar:nth-child(3) {
+            transform: rotate(45deg) translate(-5px, -6px);
+        }
+
+        /* Overlay for sidebar (used on both mobile and desktop) */
+        .mobile-overlay {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .mobile-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Desktop-specific styles */
+        @media (min-width: 769px) {
+            /* Default state: sidebar is in normal grid position */
+            .lobby-sidebar {
+                position: relative;
+                left: auto;
+                top: auto;
+                width: auto;
+                height: auto;
+                z-index: auto;
+                transition: none;
+                overflow-y: visible;
+                box-shadow: none;
+            }
+            
+            /* When sidebar is "closed" by hamburger menu on desktop */
+            .lobby-sidebar.hamburger-hidden {
+                display: none;
+            }
+            
+            /* When sidebar is hidden, game board takes full width */
+            .lobby-content.sidebar-collapsed {
+                grid-template-columns: 1fr;
+            }
+            
+            /* On desktop, overlay is more subtle and only for temporary overlay mode */
+            .mobile-overlay.open {
+                background: rgba(0, 0, 0, 0.3);
+            }
+            
+            /* Ensure game board takes full width when sidebar is collapsed */
+            .lobby-content.sidebar-collapsed .game-board-container {
+                width: 100%;
+                max-width: none;
+                padding: 1rem;
+                min-height: 100vh;
+            }
+            
+            /* Make game board expand to fill the entire available space when sidebar is collapsed */
+            .lobby-content.sidebar-collapsed .game-board {
+                width: 100%;
+                height: 90vh;
+                max-width: none;
+                margin: 0;
+                padding: 40px;
+                min-height: 700px;
+                transition: all 0.3s ease;
+            }
+            
+            /* Ensure smooth transition for the container as well */
+            .lobby-content.sidebar-collapsed .game-board-container {
+                transition: all 0.3s ease;
+            }
+            
+            /* Hide overlay on desktop by default */
+            .mobile-overlay {
+                display: none;
+            }
         }
         
         /* Rules Sidebar Styles */
@@ -46,12 +174,14 @@
             right: -400px;
             width: 400px;
             height: 100vh;
-            background: white;
-            box-shadow: -5px 0 15px rgba(0, 0, 0, 0.2);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            box-shadow: -5px 0 25px rgba(0, 0, 0, 0.3);
             transition: right 0.3s ease;
             z-index: 1000;
             overflow-y: auto;
             padding: 2rem;
+            border-left: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .rules-sidebar.open {
@@ -171,10 +301,13 @@
         }
         
         .lobby-sidebar {
-            background: #f8f9fa;
-            border-radius: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 0;
             padding: 1rem;
-            height: fit-content;
+            height: 100vh;
+            overflow-y: auto;
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
         }
         
         .lobby-header {
@@ -194,7 +327,8 @@
         }
         
         .lobby-header h1 {
-            color: #333;
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
             margin-bottom: 0.5rem;
             font-size: 1.5rem;
             font-weight: 300;
@@ -250,7 +384,8 @@
         }
 
         .player-section h3 {
-            color: #667eea;
+            color: #fff;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
             margin-bottom: 1rem;
             font-size: 1.2rem;
         }
@@ -260,7 +395,8 @@
         }
 
         .player-item {
-            background: white;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
             padding: 0.8rem;
             margin-bottom: 0.5rem;
             border-radius: 10px;
@@ -303,7 +439,8 @@
         }
 
         .game-status {
-            background: white;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
             padding: 1rem;
             border-radius: 10px;
             margin-bottom: 1rem;
@@ -330,12 +467,18 @@
         }
 
         .game-board-container {
-            background: #f8f9fa;
-            border-radius: 15px;
+            background: transparent;
+            border-radius: 0;
             padding: 1rem;
             text-align: center;
             position: relative;
             width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            transition: all 0.3s ease;
         }
         
         .game-board {
@@ -343,17 +486,23 @@
             width: 100%;
             height: 800px;
             margin: 0 auto;
-            background: white;
-            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
             padding: 60px;
             transition: all 0.3s ease;
             min-height: 600px;
             max-height: 1000px;
-            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .game-board-container {
+            transition: all 0.3s ease;
         }
         
         .captured-pieces {
-            background: white;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
             border-radius: 10px;
             padding: 1rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -363,7 +512,8 @@
         .captured-pieces h4 {
             margin: 0 0 0.5rem 0;
             font-size: 0.9rem;
-            color: #666;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .captured-pieces-list {
@@ -566,7 +716,8 @@
         }
 
         .share-link {
-            background: #f8f9fa;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
             border: 2px dashed #667eea;
             border-radius: 10px;
             padding: 1rem;
@@ -703,15 +854,46 @@
                 grid-template-columns: 1fr;
             }
             
+            .lobby-sidebar {
+                position: fixed;
+                top: 0;
+                left: -280px;
+                width: 280px;
+                height: 100vh;
+                z-index: 1000;
+                transition: left 0.3s ease;
+                overflow-y: auto;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            }
+            
+            .lobby-sidebar.open {
+                left: 0;
+            }
+            
             .game-board {
                 width: 100%;
-                max-width: 400px;
-                height: 400px;
+                max-width: none;
+                height: 80vh;
+                margin: 0;
+            }
+            
+            .game-board-container {
+                padding: 0.5rem;
             }
         }
     </style>
 </head>
 <body>
+    <!-- Hamburger menu button -->
+    <button class="hamburger-menu" id="hamburger-menu" onclick="toggleSidebar()">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+    </button>
+    
+    <!-- Mobile overlay -->
+    <div class="mobile-overlay" id="mobile-overlay" onclick="closeSidebar()"></div>
+    
     <div class="container">
         <div class="lobby-content">
             <div class="lobby-sidebar">
@@ -1952,6 +2134,56 @@
                 }
             }
             
+            handleSidebarToggle(isCollapsed) {
+                // This method handles sidebar toggle events to redraw the board elegantly
+                console.log('🔄 Handling sidebar toggle, isCollapsed:', isCollapsed);
+                
+                // Store current game state
+                const currentBoardState = lobbyState?.game_state?.board || {};
+                const currentSelection = this.selectedNode ? this.selectedNode.getAttribute('data-id') : null;
+                const currentWeaponmasterMode = this.weaponmasterMode;
+                const currentWizardMode = this.wizardMode;
+                
+                // Force a complete board redraw with new dimensions
+                this.initializeBoard();
+                console.log('✅ Board redrawn after sidebar toggle');
+                
+                // Restore game state after redraw
+                if (Object.keys(currentBoardState).length > 0) {
+                    this.updateBoardWithPieces(currentBoardState);
+                    
+                    // Restore selection if there was one
+                    if (currentSelection) {
+                        const nodeToSelect = this.nodes.find(n => n.id === currentSelection);
+                        if (nodeToSelect) {
+                            nodeToSelect.element.classList.add('selected');
+                            this.selectedNode = nodeToSelect.element;
+                            console.log('✅ Selection restored after sidebar toggle');
+                            
+                            // Restore special move modes
+                            if (currentWeaponmasterMode) {
+                                this.weaponmasterMode = true;
+                                this.getLegalMoves(currentSelection);
+                                console.log('⚔️ Weaponmaster mode restored after sidebar toggle');
+                            } else if (currentWizardMode) {
+                                this.wizardMode = true;
+                                this.getLegalMoves(currentSelection);
+                                console.log('🔮 Wizard mode restored after sidebar toggle');
+                            } else {
+                                // Regular piece selection - get legal moves
+                                this.getLegalMoves(currentSelection);
+                                console.log('✅ Legal moves restored after sidebar toggle');
+                            }
+                        }
+                    }
+                    
+                    // Update captured pieces display
+                    updateCapturedPieces();
+                }
+                
+                console.log('✅ Sidebar toggle handling completed successfully');
+            }
+            
             refreshBoard() {
                 // Force a complete refresh of the board and game state
                 console.log('Force refreshing board and game state');
@@ -2152,11 +2384,194 @@
             }
         };
 
+        // Sidebar toggle functions
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.lobby-sidebar');
+            const hamburger = document.getElementById('hamburger-menu');
+            const overlay = document.getElementById('mobile-overlay');
+            const isMobile = window.innerWidth <= 768;
+            
+            console.log('🍔 Toggle sidebar clicked, isMobile:', isMobile);
+            console.log('🍔 Sidebar classes:', sidebar.classList.toString());
+            
+            if (isMobile) {
+                // On mobile, toggle between open/closed overlay
+                if (sidebar.classList.contains('open')) {
+                    console.log('📱 Mobile: closing sidebar');
+                    closeSidebar();
+                } else {
+                    console.log('📱 Mobile: opening sidebar');
+                    openSidebar();
+                }
+            } else {
+                // On desktop, toggle between visible/hidden in grid
+                if (sidebar.classList.contains('hamburger-hidden')) {
+                    console.log('🖥️ Desktop: showing sidebar');
+                    openSidebar();
+                } else {
+                    console.log('🖥️ Desktop: hiding sidebar');
+                    closeSidebar();
+                }
+            }
+        }
+
+        function openSidebar() {
+            const sidebar = document.querySelector('.lobby-sidebar');
+            const hamburger = document.getElementById('hamburger-menu');
+            const overlay = document.getElementById('mobile-overlay');
+            const lobbyContent = document.querySelector('.lobby-content');
+            const isMobile = window.innerWidth <= 768;
+            
+            console.log('🔓 Opening sidebar, isMobile:', isMobile);
+            
+            if (isMobile) {
+                // Mobile behavior: overlay sidebar
+                sidebar.classList.add('open');
+                overlay.classList.add('open');
+                document.body.style.overflow = 'hidden';
+                console.log('📱 Mobile: sidebar opened as overlay');
+            } else {
+                // Desktop behavior: show sidebar in grid layout
+                sidebar.classList.remove('hamburger-hidden');
+                lobbyContent.classList.remove('sidebar-collapsed');
+                console.log('🖥️ Desktop: sidebar shown in grid');
+                
+                // Trigger board redraw after a short delay to allow CSS transition
+                setTimeout(() => {
+                    if (gameBoard) {
+                        console.log('🔄 Triggering board redraw after sidebar expand');
+                        gameBoard.handleSidebarToggle(false); // false = expanded
+                    }
+                }, 300);
+            }
+            
+            hamburger.classList.add('active');
+            console.log('🍔 Hamburger active, sidebar classes:', sidebar.classList.toString());
+        }
+
+        function closeSidebar() {
+            const sidebar = document.querySelector('.lobby-sidebar');
+            const hamburger = document.getElementById('hamburger-menu');
+            const overlay = document.getElementById('mobile-overlay');
+            const lobbyContent = document.querySelector('.lobby-content');
+            const isMobile = window.innerWidth <= 768;
+            
+            console.log('🔒 Closing sidebar, isMobile:', isMobile);
+            
+            if (isMobile) {
+                // Mobile behavior: hide overlay sidebar
+                sidebar.classList.remove('open');
+                overlay.classList.remove('open');
+                document.body.style.overflow = '';
+                console.log('📱 Mobile: sidebar closed as overlay');
+            } else {
+                // Desktop behavior: hide sidebar and expand game board
+                sidebar.classList.add('hamburger-hidden');
+                lobbyContent.classList.add('sidebar-collapsed');
+                console.log('🖥️ Desktop: sidebar hidden, grid collapsed');
+                
+                // Trigger board redraw after a short delay to allow CSS transition
+                setTimeout(() => {
+                    if (gameBoard) {
+                        console.log('🔄 Triggering board redraw after sidebar collapse');
+                        gameBoard.handleSidebarToggle(true); // true = collapsed
+                    }
+                }, 300);
+            }
+            
+            hamburger.classList.remove('active');
+            console.log('🍔 Hamburger inactive, sidebar classes:', sidebar.classList.toString());
+        }
+
+        // Close sidebar with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeSidebar();
+            }
+        });
+        
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(event) {
+            const sidebar = document.querySelector('.lobby-sidebar');
+            const hamburger = document.getElementById('hamburger-menu');
+            const isMobile = window.innerWidth <= 768;
+            
+            if (isMobile && sidebar.classList.contains('open')) {
+                // If clicking outside sidebar and hamburger button on mobile, close sidebar
+                if (!sidebar.contains(event.target) && !hamburger.contains(event.target)) {
+                    closeSidebar();
+                }
+            }
+        });
+
+        // Check if device is mobile and set initial sidebar state
+        function initializeMobileLayout() {
+            const isMobile = window.innerWidth <= 768;
+            const sidebar = document.querySelector('.lobby-sidebar');
+            const hamburger = document.getElementById('hamburger-menu');
+            const lobbyContent = document.querySelector('.lobby-content');
+            const overlay = document.getElementById('mobile-overlay');
+            
+            if (isMobile) {
+                // On mobile, sidebar starts closed (overlay mode)
+                sidebar.classList.remove('open');
+                overlay.classList.remove('open');
+                hamburger.classList.remove('active');
+                document.body.style.overflow = '';
+                console.log('📱 Mobile layout detected - sidebar collapsed');
+            } else {
+                // On desktop, sidebar starts visible in grid layout
+                sidebar.classList.remove('hamburger-hidden');
+                sidebar.classList.remove('open'); // Remove mobile overlay class
+                lobbyContent.classList.remove('sidebar-collapsed');
+                overlay.classList.remove('open');
+                hamburger.classList.remove('active');
+                console.log('🖥️ Desktop layout detected - sidebar visible in grid');
+            }
+        }
+
+        // Handle window resize for responsive behavior
+        function handleResize() {
+            const isMobile = window.innerWidth <= 768;
+            const sidebar = document.querySelector('.lobby-sidebar');
+            const hamburger = document.getElementById('hamburger-menu');
+            const lobbyContent = document.querySelector('.lobby-content');
+            const overlay = document.getElementById('mobile-overlay');
+            
+            // Clear all classes and reset
+            sidebar.classList.remove('open', 'hamburger-hidden');
+            lobbyContent.classList.remove('sidebar-collapsed');
+            overlay.classList.remove('open');
+            document.body.style.overflow = '';
+            
+            if (isMobile) {
+                // Mobile: start with sidebar closed
+                hamburger.classList.remove('active');
+                console.log('📱 Switched to mobile layout');
+            } else {
+                // Desktop: start with sidebar visible in grid
+                hamburger.classList.remove('active');
+                console.log('🖥️ Switched to desktop layout');
+            }
+            
+            // If we have a game board, trigger a redraw to handle the new layout
+            if (gameBoard && !isMobile) {
+                setTimeout(() => {
+                    console.log('🔄 Triggering board redraw after layout switch');
+                    gameBoard.handleSidebarToggle(false); // false = expanded (default desktop state)
+                }, 100);
+            }
+        }
+
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', () => {
             initializeDevelopmentFeatures();
             initializeLobby();
+            initializeMobileLayout();
         });
+
+        // Listen for window resize
+        window.addEventListener('resize', handleResize);
 
         // Game over handling functions
         function handleGameOver(gameData) {
