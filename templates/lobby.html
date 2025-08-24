@@ -1036,7 +1036,13 @@
                 lobbyState = data.lobby_info;
                 
                 updateLobbyDisplay();
-                initializeGameBoard();
+                
+                // Only initialize the board after we have the lobby state
+                if (lobbyState && lobbyState.game_state) {
+                    initializeGameBoard();
+                } else {
+                    console.log('Waiting for game state before initializing board...');
+                }
             } catch (error) {
                 console.error('Failed to join lobby:', error);
             }
@@ -1156,6 +1162,12 @@
                     console.log('Joined lobby via WebSocket:', lobby_info);
                     // Update the display with the current lobby state
                     updateLobbyDisplay();
+                    
+                    // Initialize the board if it hasn't been initialized yet and we have game state
+                    if (!gameBoard && lobby_info.game_state) {
+                        console.log('Initializing game board from WebSocket data...');
+                        initializeGameBoard();
+                    }
                     break;
                     
                 default:
@@ -1398,6 +1410,7 @@
             }
 
             initializeBoard() {
+                console.log('🔄 Initializing board...');
                 this.board.innerHTML = '';
                 this.nodes = [];
                 
@@ -2062,6 +2075,8 @@
             }
 
             updateBoardWithPieces(boardState) {
+                console.log('🎯 Updating board with pieces:', boardState);
+                
                 // Clear all existing pieces
                 this.nodes.forEach(node => {
                                     // Only show node ID if in development mode
@@ -2197,6 +2212,7 @@
                 
                 // Restore game state
                 if (Object.keys(currentBoardState).length > 0) {
+                    console.log('Restoring board state after refresh:', currentBoardState);
                     this.updateBoardWithPieces(currentBoardState);
                     
                     // Restore selection
@@ -2208,6 +2224,8 @@
                             this.getLegalMoves(currentSelection);
                         }
                     }
+                } else {
+                    console.log('No board state to restore after refresh');
                 }
                 
                 // Update captured pieces
@@ -2222,6 +2240,17 @@
 
         function initializeGameBoard() {
             gameBoard = new MolecularBoard();
+            
+            // If we already have game state, restore it immediately
+            if (lobbyState && lobbyState.game_state && lobbyState.game_state.board) {
+                console.log('Restoring game state after board initialization...');
+                gameBoard.updateBoardWithPieces(lobbyState.game_state.board);
+                
+                // Also update captured pieces if available
+                if (lobbyState.game_state.captured_pieces) {
+                    updateCapturedPieces();
+                }
+            }
         }
         
         // Handle page unload
@@ -2568,6 +2597,14 @@
             initializeDevelopmentFeatures();
             initializeLobby();
             initializeMobileLayout();
+            
+            // Fallback: if board still isn't initialized after a short delay, try to initialize it
+            setTimeout(() => {
+                if (!gameBoard && lobbyState) {
+                    console.log('Fallback: Initializing game board after delay...');
+                    initializeGameBoard();
+                }
+            }, 1000);
         });
 
         // Listen for window resize
