@@ -738,6 +738,21 @@ class Lobby:
                 # Get all possible moves for this enemy piece
                 legal_moves = get_legal_moves(piece, node, self.game_state['board'], enemy_color)
                 
+                # For wizard moves, only check the final destination, not intermediate nodes
+                if 'wizard' in piece:
+                    # Filter wizard moves to only include final destinations
+                    filtered_moves = set()
+                    for move in legal_moves:
+                        if '->' in move:
+                            # Wizard move with path - only include final destination
+                            nodes = move.split('->')
+                            if len(nodes) == 3:
+                                filtered_moves.add(nodes[2])  # Final destination only
+                        else:
+                            # Single node move
+                            filtered_moves.add(move)
+                    legal_moves = filtered_moves
+                
                 # Check if any of these moves would capture the Matron Mother
                 if matron_mother_node in legal_moves:
                     return True
@@ -792,6 +807,21 @@ class Lobby:
             if piece.startswith(enemy_color + '_'):
                 # Get all possible moves for this enemy piece
                 legal_moves = get_legal_moves(piece, node, temp_board, enemy_color)
+                
+                # For wizard moves, only check the final destination, not intermediate nodes
+                if 'wizard' in piece:
+                    # Filter wizard moves to only include final destinations
+                    filtered_moves = set()
+                    for move in legal_moves:
+                        if '->' in move:
+                            # Wizard move with path - only include final destination
+                            nodes = move.split('->')
+                            if len(nodes) == 3:
+                                filtered_moves.add(nodes[2])  # Final destination only
+                        else:
+                            # Single node move
+                            filtered_moves.add(move)
+                    legal_moves = filtered_moves
                 
                 # Check if any of these moves would capture the Matron Mother
                 if matron_mother_node in legal_moves:
