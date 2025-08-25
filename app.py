@@ -351,10 +351,14 @@ class Lobby:
             'game_started': False,
             'last_move': None,
             'game_pieces': {},  # Will store piece positions
-            'captured_pieces': {
-                'red': [],  # Pieces captured by red player
-                'blue': []  # Pieces captured by blue player
-            }
+        'captured_pieces': {
+            'red': [],  # Pieces captured by red player
+            'blue': []  # Pieces captured by blue player
+        },
+        'player_turn_numbers': {
+            'red': 0,  # Red player's turn counter
+            'blue': 0   # Blue player's turn counter
+        }
         }
 
     def add_player(self, player_id, player_name):
@@ -411,6 +415,7 @@ class Lobby:
         self.game_state['game_started'] = True
         self.game_state['current_turn'] = 'red'
         self.game_state['last_move'] = None
+        self.game_state['player_turn_numbers'] = {'red': 0, 'blue': 0}  # Initialize player turn counters
         
         # Update the board state to reflect piece positions
         self.game_state['board'] = {}
@@ -611,6 +616,9 @@ class Lobby:
                 'move_type': 'single_node'
             }
         
+        # Increment the current player's turn counter
+        self.game_state['player_turn_numbers'][player['color']] += 1
+        
         # Switch turns
         self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
         
@@ -658,6 +666,114 @@ class Lobby:
                 'game_end_reason': self.game_state.get('game_end_reason'),
                 'final_board': self.game_state['board']
             })
+        
+        return True, self.game_state
+    
+    def roll_spider_dice(self, player_id):
+        """Roll spider dice for the current player."""
+        # Verify the game has started
+        if not self.game_state['game_started']:
+            return False, "Game not started"
+        
+        # Find the player
+        player = next((p for p in self.players if p['id'] == player_id), None)
+        if not player:
+            return False, "Player not found"
+        
+        # Check if it's the current player's turn
+        if player['color'] != self.game_state['current_turn']:
+            return False, "Not your turn"
+        
+        # Check turn number requirement (must be at least turn 3)
+        player_turn_count = self.game_state['player_turn_numbers'][player['color']]
+        if player_turn_count < 3:
+            return False, f"Must wait until turn 3 (current turn: {player_turn_count})"
+        
+        # Roll two d8 dice (1-8)
+        import random
+        die1 = random.randint(1, 8)
+        die2 = random.randint(1, 8)
+        
+        # Determine spider results (5-8 = spider, 1-4 = knife)
+        die1_spider = die1 >= 5
+        die2_spider = die2 >= 5
+        both_spiders = die1_spider and die2_spider
+        both_knives = not die1_spider and not die2_spider
+        
+        # Reset this player's turn counter to 0 after rolling spider dice (cooldown mechanism)
+        self.game_state['player_turn_numbers'][player['color']] = 0
+        
+        # Create move record
+        self.game_state['last_move'] = {
+            'move_type': 'spider_dice_roll',
+            'player': player['color'],
+            'dice_results': {
+                'die1': die1,
+                'die2': die2,
+                'die1_spider': die1_spider,
+                'die2_spider': die2_spider,
+                'both_spiders': both_spiders,
+                'both_knives': both_knives
+            }
+        }
+        
+        # Switch turns
+        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        
+        print(f"🎲 {player['color']} player rolled spider dice: {die1} ({'🕷️' if die1_spider else '🔪'}) and {die2} ({'🕷️' if die2_spider else '🔪'})")
+        if both_spiders:
+            print(f"🕷️🕷️ DOUBLE SPIDERS! Special effect triggered!")
+        
+        # Notify all players about the dice roll
+        notify_lobby_update(self.lobby_id, 'spider_dice_rolled', self.game_state)
+        
+        return True, self.game_state
+    
+    def sacrifice_piece(self, node_id, player_id):
+        """Sacrifice a piece (remove it from the board)."""
+        # Verify the game has started
+        if not self.game_state['game_started']:
+            return False, "Game not started"
+        
+        # Find the player
+        player = next((p for p in self.players if p['id'] == player_id), None)
+        if not player:
+            return False, "Player not found"
+        
+        # Check if it's the current player's turn
+        if player['color'] != self.game_state['current_turn']:
+            return False, "Not your turn"
+        
+        # Check if there's a piece at the specified node
+        if node_id not in self.game_state['board']:
+            return False, "No piece at specified node"
+        
+        # Check if the piece belongs to the current player
+        piece_name = self.game_state['board'][node_id]
+        if not piece_name.startswith(player['color'] + '_'):
+            return False, "Cannot sacrifice enemy piece"
+        
+        # Remove the piece from the board
+        del self.game_state['board'][node_id]
+        
+        # Create move record
+        self.game_state['last_move'] = {
+            'move_type': 'piece_sacrificed',
+            'player': player['color'],
+            'piece': piece_name,
+            'node': node_id
+        }
+        
+        # Increment the current player's turn counter
+        self.game_state['player_turn_numbers'][player['color']] += 1
+        
+        # Switch turns
+        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        
+        print(f"💀 {player['color']} player sacrificed {piece_name} at {node_id}")
+        
+        # Notify all players about the sacrifice
+        notify_lobby_update(self.lobby_id, 'piece_sacrificed', self.game_state)
         
         return True, self.game_state
     
@@ -1056,6 +1172,65 @@ def move_piece_api(lobby_id):
     
     # Execute the move
     success, result = lobby.execute_move(from_node, to_node, player_id)
+    
+    if success:
+        return jsonify({
+            'success': True,
+            'game_state': result
+        })
+    else:
+        return jsonify({'error': result}), 400
+
+@app.route('/api/lobby/<lobby_id>/roll-spider-dice', methods=['POST'])
+def roll_spider_dice_api(lobby_id):
+    if lobby_id not in lobbies:
+        return jsonify({'error': 'Lobby not found'}), 404
+    
+    data = request.get_json()
+    player_id = data.get('player_id')
+    
+    if not player_id:
+        return jsonify({'error': 'Player ID required'}), 400
+    
+    lobby = lobbies[lobby_id]
+    
+    # Verify player is in this lobby
+    player = next((p for p in lobby.players if p['id'] == player_id), None)
+    if not player:
+        return jsonify({'error': 'Player not in lobby'}), 403
+    
+    # Roll the spider dice
+    success, result = lobby.roll_spider_dice(player_id)
+    
+    if success:
+        return jsonify({
+            'success': True,
+            'game_state': result
+        })
+    else:
+        return jsonify({'error': result}), 400
+
+@app.route('/api/lobby/<lobby_id>/sacrifice', methods=['POST'])
+def sacrifice_piece_api(lobby_id):
+    if lobby_id not in lobbies:
+        return jsonify({'error': 'Lobby not found'}), 404
+    
+    data = request.get_json()
+    node_id = data.get('node_id')
+    player_id = data.get('player_id')
+    
+    if not node_id or not player_id:
+        return jsonify({'error': 'Node ID and Player ID required'}), 400
+    
+    lobby = lobbies[lobby_id]
+    
+    # Verify player is in this lobby
+    player = next((p for p in lobby.players if p['id'] == player_id), None)
+    if not player:
+        return jsonify({'error': 'Player not in lobby'}), 403
+    
+    # Sacrifice the piece
+    success, result = lobby.sacrifice_piece(node_id, player_id)
     
     if success:
         return jsonify({

@@ -87,6 +87,16 @@
                         </button>
                     </div>
                     
+                    <!-- Spider dice button -->
+                    <div id="spider-dice-controls" style="margin-bottom: 0.5rem;">
+                        <button class="btn spider-dice dice-roll-button" id="spider-dice-btn" onclick="gameBoard.rollSpiderDice()" title="Roll two d8 dice: 5-8 = 🕷️ (spider), 1-4 = 🔪 (knife). Double spiders trigger special effects!" disabled>
+                            🕷️ Roll Spider Dice
+                        </button>
+                        <div style="font-size: 0.8rem; color: #666; margin-top: 0.25rem; text-align: center;">
+                            🕷️ = Success, 🔪 = Knife
+                        </div>
+                    </div>
+                    
                     <!-- Board refresh button -->
                     <button class="btn secondary dev-feature" id="refresh-board-btn" onclick="gameBoard.refreshBoard()" style="margin-top: 0.5rem;">
                         🔄 Refresh Board
@@ -106,6 +116,17 @@
             <div class="game-over-message" id="game-over-message">The game has ended</div>
             <button class="game-over-btn" onclick="closeGameOverOverlay()">Close</button>
         </div>
+    </div>
+    
+    <!-- Spider dice result overlay -->
+    <div class="dice-result" id="dice-result">
+        <h3>🕷️ Spider Dice Results</h3>
+        <div class="dice-results">
+            <div class="die" id="die1">?</div>
+            <div class="die" id="die2">?</div>
+        </div>
+        <div id="dice-message">Rolling...</div>
+        <button class="btn spider-dice" onclick="closeDiceResult()" style="margin-top: 1rem;">Close</button>
     </div>
 
     <!-- Rules Sidebar -->
@@ -166,7 +187,9 @@
                 
                 // Only initialize the board after we have the lobby state
                 if (lobbyState && lobbyState.game_state) {
-                    initializeGameBoard();
+                    initializeGameBoard().catch(error => {
+                        console.error('Failed to initialize game board:', error);
+                    });
                 } else {
                     console.log('Waiting for game state before initializing board...');
                 }
@@ -228,11 +251,17 @@
                     `Game in progress - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
                 document.getElementById('status-indicator').className = 'status-indicator status-playing';
                 document.getElementById('start-game-btn').disabled = true;
+                
+                // Update spider dice button state when game starts
+                updateSpiderDiceButtonState();
                 break;
                 
             case 'game_over':
                 console.log('Game over via WebSocket:', eventData);
                 handleGameOver(eventData);
+                
+                // Update spider dice button state when game ends
+                updateSpiderDiceButtonState();
                 break;
                     
                 case 'piece_moved':
@@ -271,6 +300,83 @@
                     
                     // Update captured pieces display
                     updateCapturedPieces();
+                    
+                    // Update spider dice button state after piece move
+                    updateSpiderDiceButtonState();
+                    break;
+                    
+                case 'spider_dice_rolled':
+                    console.log('Spider dice rolled via WebSocket');
+                    if (gameBoard && lobby_info.game_state.board) {
+                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
+                    }
+                    
+                    // Update status with dice results
+                    const diceMoveInfo = lobby_info.game_state.last_move;
+                    if (diceMoveInfo && diceMoveInfo.move_type === 'spider_dice_roll') {
+                        const diceResults = diceMoveInfo.dice_results;
+                        let statusText = `${diceMoveInfo.player.charAt(0).toUpperCase() + diceMoveInfo.player.slice(1)} rolled spider dice: `;
+                        statusText += `${diceResults.die1_spider ? '🕷️' : '🔪'} and ${diceResults.die2_spider ? '🕷️' : '🔪'}`;
+                        
+                        if (diceResults.both_spiders) {
+                            statusText += ' 🕷️🕷️ DOUBLE SPIDERS! Something special happens!';
+                        } else {
+                            const spiderCount = (diceResults.die1_spider ? 1 : 0) + (diceResults.die2_spider ? 1 : 0);
+                            if (spiderCount === 1) {
+                                statusText += ' (1 spider)';
+                            } else {
+                                statusText += ' (no knives)';
+                            }
+                        }
+                        
+                        const currentTurn = lobby_info.game_state.current_turn;
+                        statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
+                        
+                        document.getElementById('status-text').innerHTML = statusText;
+                    }
+                    
+                    // Clear any current selection since it's not our turn
+                    gameBoard.clearLegalMoveIndicators();
+                    if (gameBoard.selectedNode) {
+                        gameBoard.selectedNode.classList.remove('selected');
+                        gameBoard.selectedNode = null;
+                    }
+                    
+                    // Update captured pieces display
+                    updateCapturedPieces();
+                    
+                    // Update spider dice button state after dice roll
+                    updateSpiderDiceButtonState();
+                    break;
+                    
+                case 'piece_sacrificed':
+                    console.log('Piece sacrificed via WebSocket');
+                    if (gameBoard && lobby_info.game_state.board) {
+                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
+                    }
+                    
+                    // Update status with sacrifice information
+                    const sacrificeMoveInfo = lobby_info.game_state.last_move;
+                    if (sacrificeMoveInfo && sacrificeMoveInfo.move_type === 'piece_sacrificed') {
+                        let statusText = `${sacrificeMoveInfo.player.charAt(0).toUpperCase() + sacrificeMoveInfo.player.slice(1)} sacrificed ${sacrificeMoveInfo.piece}`;
+                        const currentTurn = lobby_info.game_state.current_turn;
+                        statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
+                        
+                        document.getElementById('status-text').textContent = statusText;
+                    }
+                    
+                    // Clear any current selection since it's not our turn
+                    gameBoard.clearLegalMoveIndicators();
+                    if (gameBoard.selectedNode) {
+                        gameBoard.selectedNode.classList.remove('selected');
+                        gameBoard.selectedNode = null;
+                    }
+                    
+                    // Update captured pieces display
+                    updateCapturedPieces();
+                    
+                    // Update spider dice button state after piece sacrifice
+                    updateSpiderDiceButtonState();
                     break;
                     
                 case 'player_joined':
@@ -293,7 +399,9 @@
                     // Initialize the board if it hasn't been initialized yet and we have game state
                     if (!gameBoard && lobby_info.game_state) {
                         console.log('Initializing game board from WebSocket data...');
-                        initializeGameBoard();
+                        initializeGameBoard().catch(error => {
+                            console.error('Failed to initialize game board from WebSocket:', error);
+                        });
                     }
                     break;
                     
@@ -366,7 +474,13 @@
                 // Game is already started
                 statusIndicator.className = 'status-indicator status-playing';
                 const currentTurn = lobbyState.game_state.current_turn;
-                statusText.textContent = `Game in progress - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
+                const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+                if (currentPlayer) {
+                    const playerTurnCount = lobbyState.game_state.player_turn_numbers?.[currentPlayer.color] || 0;
+                    statusText.textContent = `Game in progress - Your turn count: ${playerTurnCount} - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
+                } else {
+                    statusText.textContent = `Game in progress - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
+                }
             } else if (lobbyState.can_start) {
                 // Ready to start but not started yet
                 statusIndicator.className = 'status-indicator status-ready';
@@ -375,6 +489,11 @@
                 // Waiting for players
                 statusIndicator.className = 'status-indicator status-waiting';
                 statusText.textContent = `Waiting for players... (${playerCount}/2)`;
+            }
+            
+            // Update spider dice button state when lobby display is updated
+            if (lobbyState.game_state && lobbyState.game_state.game_started) {
+                updateSpiderDiceButtonState();
             }
         }
 
@@ -441,8 +560,34 @@
                 this.lastWidth = window.innerWidth;
                 this.lastHeight = window.innerHeight;
                 
-                this.initializeBoard();
+                // Check if GAME_CONFIG is loaded before initializing board
+                if (GAME_CONFIG) {
+                    console.log('🎯 GAME_CONFIG available, initializing board immediately');
+                    this.initializeBoard();
+                } else {
+                    console.log('🎯 GAME_CONFIG not loaded yet, waiting...');
+                    // Wait for GAME_CONFIG to load
+                    this.waitForGameConfig();
+                }
+                
                 this.setupResizeDetection();
+            }
+            
+            async waitForGameConfig() {
+                let attempts = 0;
+                const maxAttempts = 50; // Wait up to 5 seconds
+                
+                while (!GAME_CONFIG && attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    attempts++;
+                }
+                
+                if (GAME_CONFIG) {
+                    console.log('🎯 GAME_CONFIG loaded after waiting, initializing board');
+                    this.initializeBoard();
+                } else {
+                    console.error('🎯 GAME_CONFIG failed to load after waiting');
+                }
             }
 
             setupResizeDetection() {
@@ -1199,17 +1344,25 @@
                 });
             }
 
-            updateBoardWithPieces(boardState) {
-                console.log('🎯 Updating board with pieces:', boardState);
+            updateBoardWithPieces(boardState) {                
+                if (!boardState || Object.keys(boardState).length === 0) {
+                    console.log('🎯 No board state to update');
+                    return;
+                }
+                
+                if (!this.nodes || this.nodes.length === 0) {
+                    console.error('🎯 No nodes available for piece placement');
+                    return;
+                }
                 
                 // Clear all existing pieces
                 this.nodes.forEach(node => {
-                                    // Only show node ID if in development mode
-                if (GAME_CONFIG?.development?.enabled) {
-                    node.element.textContent = node.id;
-                } else {
-                    node.element.textContent = '';
-                }
+                    // Only show node ID if in development mode
+                    if (GAME_CONFIG?.development?.enabled) {
+                        node.element.textContent = node.id;
+                    } else {
+                        node.element.textContent = '';
+                    }
                     node.element.style.background = '#fff';
                     node.element.style.borderColor = '#333';
                     node.element.classList.remove('enemy-piece');
@@ -1226,26 +1379,41 @@
                             
                             // Color the node based on piece color
                             const isRed = pieceName.startsWith('red_');
-                            const currentTurn = lobbyState?.game_state?.current_turn;
-                            const isEnemyPiece = pieceName.startsWith(currentTurn + '_') === false;
                             
-                            if (isEnemyPiece) {
-                                // Enemy piece - add enemy-piece class and style
-                                node.element.classList.add('enemy-piece');
-                                node.element.style.background = isRed ? '#ffebee' : '#e3f2fd';
-                                node.element.style.color = isRed ? '#c62828' : '#1565c0';
-                                node.element.style.borderColor = isRed ? '#ef5350' : '#42a5f5';
-                                node.element.style.opacity = '0.8';
+                            // Default to red styling if currentTurn is not set yet
+                            if (isRed) {
+                                node.element.style.background = '#ffebee';
+                                node.element.style.color = '#c62828';
+                                node.element.style.borderColor = '#ef5350';
                             } else {
-                                // Friendly piece - normal styling
-                                node.element.style.background = isRed ? '#ffebee' : '#e3f2fd';
-                                node.element.style.color = isRed ? '#c62828' : '#1565c0';
-                                node.element.style.borderColor = isRed ? '#ef5350' : '#42a5f5';
+                                node.element.style.background = '#e3f2fd';
+                                node.element.style.color = '#1565c0';
+                                node.element.style.borderColor = '#42a5f5';
+                            }
+                            
+                            // Add enemy-piece class if we have a current turn and this is an enemy piece
+                            const currentTurn = lobbyState?.game_state?.current_turn;
+                            if (currentTurn) {
+                                const isEnemyPiece = pieceName.startsWith(currentTurn + '_') === false;
+                                if (isEnemyPiece) {
+                                    node.element.classList.add('enemy-piece');
+                                    node.element.style.opacity = '0.8';
+                                } else {
+                                    node.element.style.opacity = '1';
+                                }
+                            } else {
+                                // No current turn set yet, default to normal opacity
                                 node.element.style.opacity = '1';
                             }
+                        } else {
+                            console.warn(`🎯 Could not get symbol for piece: ${pieceName}`);
                         }
+                    } else {
+                        console.warn(`🎯 Node not found for piece placement: ${nodeId}`);
                     }
-                }
+                }                
+                // Update spider dice button state after board update
+                updateSpiderDiceButtonState();
             }
 
             getPieceSymbol(pieceName) {
@@ -1318,6 +1486,197 @@
                     
                     // Update captured pieces display
                     updateCapturedPieces();
+                    
+                    // Update spider dice button state after sidebar toggle
+                    updateSpiderDiceButtonState();
+                }
+            }
+            
+            async rollSpiderDice() {
+                try {
+                    console.log('🎲 Rolling spider dice...');
+                    console.log('🎲 Current game state:', {
+                        player_turn_numbers: lobbyState?.game_state?.player_turn_numbers,
+                        current_turn: lobbyState?.game_state?.current_turn,
+                        player_id: playerId
+                    });
+                    
+                    // Check if it's the current player's turn
+                    const currentPlayer = lobbyState?.players.find(p => p.id === playerId);
+                    if (!currentPlayer) {
+                        document.getElementById('status-text').textContent = 'Error: Player not found';
+                        return;
+                    }
+                    
+                    const currentTurn = lobbyState?.game_state?.current_turn;
+                    if (currentPlayer.color !== currentTurn) {
+                        document.getElementById('status-text').textContent = 'Not your turn!';
+                        return;
+                    }
+                    
+                    // Start rolling animation
+                    const diceBtn = document.getElementById('spider-dice-btn');
+                    diceBtn.disabled = true;
+                    diceBtn.textContent = '🎲 Rolling...';
+                    diceBtn.classList.add('rolling');
+                    
+                    // Update button text to show rolling progress
+                    let rollTime = 0;
+                    const rollInterval = setInterval(() => {
+                        rollTime += 0.5;
+                        if (rollTime < 2) {
+                            diceBtn.textContent = `🎲 Rolling... ${rollTime.toFixed(1)}s`;
+                        }
+                    }, 500);
+                    
+                    // Stop the rollInterval after 2 seconds
+                    setTimeout(() => {
+                        clearInterval(rollInterval);
+                    }, 2000);
+                    
+                    // Initialize audio and play dice rolling sound
+                    initAudioContext();
+                    playDiceRollSound();
+                    
+                    // Show dice overlay with rolling animation
+                    const diceResult = document.getElementById('dice-result');
+                    const die1Element = document.getElementById('die1');
+                    const die2Element = document.getElementById('die2');
+                    const diceMessage = document.getElementById('dice-message');
+                    
+                    // Set initial rolling state
+                    diceMessage.textContent = '🎲 Rolling the dice...';
+                    die1Element.textContent = '🎲';
+                    die2Element.textContent = '🎲';
+                    die1Element.className = 'die rolling-fast';
+                    die2Element.className = 'die rolling-fast';
+                    
+                    // Show the overlay
+                    diceResult.classList.add('show');
+                    
+                    // Update dice message to show rolling progress
+                    let diceRollTime = 0;
+                    const diceMessageInterval = setInterval(() => {
+                        diceRollTime += 0.5;
+                        if (diceRollTime < 2) {
+                            diceMessage.textContent = `🎲 Rolling the dice... ${diceRollTime.toFixed(1)}s`;
+                        } else {
+                            // Stop the interval when rolling is complete
+                            clearInterval(diceMessageInterval);
+                        }
+                    }, 500);
+                    
+                    const lobbyId = document.getElementById('lobby-id').textContent;
+                    const response = await fetch(`/api/lobby/${lobbyId}/roll-spider-dice`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            player_id: playerId
+                        })
+                    });
+
+                    const data = await response.json();
+                    console.log('Spider dice response:', data);
+                    
+                    if (data.success) {
+                        // Update the board with the new state
+                        this.updateBoardWithPieces(data.game_state.board);
+                        
+                        // Clear any current selection
+                        this.clearLegalMoveIndicators();
+                        if (this.selectedNode) {
+                            this.selectedNode.classList.remove('selected');
+                            this.selectedNode = null;
+                        }
+                        
+                        // Update status with dice results
+                        const moveInfo = data.game_state.last_move;
+                        if (moveInfo && moveInfo.move_type === 'spider_dice_roll') {
+                            const diceResults = moveInfo.dice_results;
+                            let statusText = `${moveInfo.player.charAt(0).toUpperCase() + moveInfo.player.slice(1)} rolled spider dice: `;
+                            statusText += `${diceResults.die1_spider ? '🕷️' : '🔪'} and ${diceResults.die2_spider ? '🕷️' : '🔪'}`;
+                            
+                            if (diceResults.both_spiders) {
+                                statusText += ' 🕷️🕷️ DOUBLE SPIDERS! Something special happens!';
+                            } else {
+                                const spiderCount = (diceResults.die1_spider ? 1 : 0) + (diceResults.die2_spider ? 1 : 0);
+                                if (spiderCount === 1) {
+                                    statusText += ' (1 spider)';
+                                } else {
+                                    statusText += ' (no knives)';
+                                }
+                            }
+                            
+                            const currentTurn = data.game_state.current_turn;
+                            statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
+                            
+                            document.getElementById('status-text').innerHTML = statusText;
+                            
+                            // Stop rolling animation and show final results with bounce
+                            clearInterval(rollInterval); // Stop the rolling progress counter
+                            clearInterval(diceMessageInterval); // Stop the dice message progress counter
+                            setTimeout(() => {
+                                showDiceResult(
+                                    diceResults.die1,
+                                    diceResults.die2,
+                                    diceResults.die1_spider,
+                                    diceResults.die2_spider,
+                                    diceResults.both_spiders,
+                                    diceResults.both_knives
+                                );
+                            }, 2000); // Match the rolling animation duration for dramatic effect
+                        }
+                        
+                        // Update local lobby state
+                        lobbyState = data.game_state;
+                        
+                        // Update captured pieces display
+                        updateCapturedPieces();
+                        
+                        // Update spider dice button state after successful roll
+                        console.log('🎲 Updating spider dice button state after successful roll');
+                        updateSpiderDiceButtonState();
+                    } else {
+                        // Hide the dice overlay on failure
+                        const diceResult = document.getElementById('dice-result');
+                        diceResult.classList.remove('show');
+                        
+                        // Clear intervals
+                        clearInterval(rollInterval);
+                        clearInterval(diceMessageInterval);
+                        
+                        document.getElementById('status-text').innerHTML = '<strong>Spider dice roll failed:</strong> ' + (data.error || 'Unknown error');
+                        
+                        // Update spider dice button state after failed roll
+                        updateSpiderDiceButtonState();
+                    }
+                } catch (error) {
+                    console.error('Failed to roll spider dice:', error);
+                    
+                    // Hide the dice overlay on error
+                    const diceResult = document.getElementById('dice-result');
+                    diceResult.classList.remove('show');
+                    
+                    document.getElementById('status-text').innerHTML = '<strong>Failed to roll spider dice.</strong> Please try again.';
+                    
+                    // Update spider dice button state after error
+                    updateSpiderDiceButtonState();
+                } finally {
+                    // Re-enable the button and remove rolling animation
+                    const diceBtn = document.getElementById('spider-dice-btn');
+                    diceBtn.disabled = false;
+                    diceBtn.textContent = '🕷️ Roll Spider Dice';
+                    diceBtn.classList.remove('rolling');
+                    
+                    // Clear the rolling progress interval if it exists
+                    if (typeof rollInterval !== 'undefined') {
+                        clearInterval(rollInterval);
+                    }
+                    if (typeof diceMessageInterval !== 'undefined') {
+                        clearInterval(diceMessageInterval);
+                    }
                 }
             }
             
@@ -1352,26 +1711,60 @@
                 
                 // Update captured pieces
                 updateCapturedPieces();
+                
+                // Update spider dice button state after board refresh
+                updateSpiderDiceButtonState();
             }
         }
 
         // Global function to get piece symbols (used by captured pieces display)
         function getPieceSymbol(pieceName) {
-            return GameLogic.getPieceSymbol(pieceName);
+            if (!GameLogic) {
+                console.error('🎯 GameLogic not available!');
+                return pieceName;
+            }
+            if (!GAME_CONFIG) {
+                console.error('🎯 GAME_CONFIG not available!');
+                return pieceName;
+            }            
+            const symbol = GameLogic.getPieceSymbol(pieceName);
+            return symbol;
         }
 
-        function initializeGameBoard() {
+        async function initializeGameBoard() {
+            console.log('🎯 Initializing game board...');
             gameBoard = new MolecularBoard();
             
-            // If we already have game state, restore it immediately
-            if (lobbyState && lobbyState.game_state && lobbyState.game_state.board) {
-                console.log('Restoring game state after board initialization...');
-                gameBoard.updateBoardWithPieces(lobbyState.game_state.board);
+            // Wait for the board to be fully initialized
+            let attempts = 0;
+            const maxAttempts = 100; // Wait up to 10 seconds
+            
+            while ((!gameBoard.nodes || gameBoard.nodes.length === 0) && attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+            }
+            
+            if (gameBoard.nodes && gameBoard.nodes.length > 0) {
+                console.log('🎯 Board initialized with', gameBoard.nodes.length, 'nodes');
                 
-                // Also update captured pieces if available
-                if (lobbyState.game_state.captured_pieces) {
-                    updateCapturedPieces();
+                // If we already have game state, restore it immediately
+                if (lobbyState && lobbyState.game_state && lobbyState.game_state.board) {
+                    console.log('🎯 Restoring game state after board initialization...');
+                    console.log('🎯 Board state:', lobbyState.game_state.board);
+                    gameBoard.updateBoardWithPieces(lobbyState.game_state.board);
+                    
+                    // Also update captured pieces if available
+                    if (lobbyState.game_state.captured_pieces) {
+                        updateCapturedPieces();
+                    }
+                    
+                    // Update spider dice button state after board initialization
+                    updateSpiderDiceButtonState();
+                } else {
+                    console.log('🎯 No game state to restore yet');
                 }
+            } else {
+                console.error('🎯 Board failed to initialize properly');
             }
         }
         
@@ -1914,6 +2307,215 @@
                 closeRulesSidebar();
             }
         });
+        
+        // Spider dice helper functions
+        let audioContext = null;
+        
+        function initAudioContext() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (error) {
+                    console.warn('Audio context not supported:', error);
+                }
+            }
+        }
+        
+        function playDiceRollSound() {
+            if (!audioContext) return;
+            
+            try {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.3);
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.3);
+            } catch (error) {
+                console.warn('Failed to play dice roll sound:', error);
+            }
+        }
+        
+        function playDoubleSpiderSound() {
+            if (!audioContext) return;
+            
+            try {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(1200, audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.5);
+                
+                gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+            } catch (error) {
+                console.warn('Failed to play double spider sound:', error);
+            }
+        }
+        
+        function showDiceResult(die1, die2, die1Spider, die2Spider, bothSpiders, bothKnives) {
+            const diceResult = document.getElementById('dice-result');
+            const die1Element = document.getElementById('die1');
+            const die2Element = document.getElementById('die2');
+            const diceMessage = document.getElementById('dice-message');
+            
+            // Stop rolling animation
+            die1Element.className = 'die';
+            die2Element.className = 'die';
+            
+            // Show final results
+            die1Element.textContent = die1Spider ? '🕷️' : '🔪';
+            die2Element.textContent = die2Spider ? '🕷️' : '🔪';
+            
+            // Add bounce animation
+            die1Element.classList.add('bounce');
+            die2Element.classList.add('bounce');
+            
+            // Update message
+            if (bothSpiders) {
+                diceMessage.innerHTML = '<strong>🕷️🕷️ DOUBLE SPIDERS!</strong><br>The spider queen bestows a boon...';
+                playDoubleSpiderSound();
+                triggerConfetti();
+            } else if (bothKnives) {
+                diceMessage.innerHTML = '<strong>🔪🔪 Both knives!</strong><br>The spider queen demands sacrifice!';
+            } else {
+                const spiderCount = (die1Spider ? 1 : 0) + (die2Spider ? 1 : 0);
+                diceMessage.innerHTML = `<strong>${spiderCount} spider${spiderCount !== 1 ? 's' : ''}!</strong><br>${spiderCount === 1 ? 'The spider queen ignores your prayers...' : 'No special effects.'}`;
+            }
+            
+            // Remove bounce animation after a delay
+            setTimeout(() => {
+                die1Element.classList.remove('bounce');
+                die2Element.classList.remove('bounce');
+            }, 1000);
+        }
+        
+        function closeDiceResult() {
+            const diceResult = document.getElementById('dice-result');
+            diceResult.classList.remove('show');
+        }
+        
+        function updateSpiderDiceButtonState() {
+            if (!lobbyState || !lobbyState.game_state) {
+                console.log('🎲 No lobby state available for spider dice button update');
+                return;
+            }
+            
+            const spiderDiceBtn = document.getElementById('spider-dice-btn');
+            if (!spiderDiceBtn) {
+                console.log('🎲 Spider dice button not found');
+                return;
+            }
+            
+            const gameState = lobbyState.game_state;
+            const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+            
+            if (!currentPlayer) {
+                console.log('🎲 Current player not found');
+                return;
+            }
+            
+            // Check if it's the current player's turn
+            const isCurrentTurn = currentPlayer.color === gameState.current_turn;
+            
+            // Check if the game has started
+            const gameStarted = gameState.game_started;
+            
+            // Check if the button should be enabled based on turn number and cooldown
+            let shouldEnable = false;
+            let reason = '';
+            
+            if (!gameStarted) {
+                shouldEnable = false;
+                reason = 'Game not started';
+            } else if (!isCurrentTurn) {
+                shouldEnable = false;
+                reason = 'Not your turn';
+            } else {
+                // Check turn number requirement (must be at least turn 3)
+                const playerTurnCount = gameState.player_turn_numbers?.[currentPlayer.color] || 0;
+                if (playerTurnCount < 3) {
+                    shouldEnable = false;
+                    reason = `Must wait until turn ${3 - playerTurnCount} more`;
+                } else {
+                    shouldEnable = true;
+                    reason = 'Ready to roll';
+                }
+            }
+            
+            console.log('🎲 Spider dice button state:', {
+                shouldEnable,
+                reason,
+                player_turn_count: gameState.player_turn_numbers?.[currentPlayer.color] || 0,
+                current_turn: gameState.current_turn,
+                player_color: currentPlayer.color,
+                explanation: `Player has completed ${gameState.player_turn_numbers?.[currentPlayer.color] || 0} turns - needs 3 to use spider dice`
+            });
+            
+            // Update button state
+            spiderDiceBtn.disabled = !shouldEnable;
+            
+            // Update button text and styling
+            if (shouldEnable) {
+                spiderDiceBtn.textContent = '🕷️ Roll Spider Dice';
+                spiderDiceBtn.classList.remove('disabled');
+                spiderDiceBtn.title = 'Roll two d8 dice: 5-8 = 🕷️ (spider), 1-4 = 🔪 (knife). Double spiders trigger special effects!';
+            } else {
+                spiderDiceBtn.textContent = `🕷️ ${reason}`;
+                spiderDiceBtn.classList.add('disabled');
+                spiderDiceBtn.title = `Spider dice unavailable: ${reason}`;
+            }
+        }
+        
+        function updateGameStatus() {
+            if (!lobbyState || !lobbyState.game_state) {
+                return;
+            }
+            
+            const gameState = lobbyState.game_state;
+            const statusText = document.getElementById('status-text');
+            const statusIndicator = document.getElementById('status-indicator');
+            
+            if (!gameState.game_started) {
+                statusText.textContent = 'Waiting for players to join...';
+                statusIndicator.className = 'status-indicator status-waiting';
+                return;
+            }
+            
+            const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+            if (!currentPlayer) {
+                statusText.textContent = 'Error: Player not found';
+                return;
+            }
+            
+            const isCurrentTurn = currentPlayer.color === gameState.current_turn;
+            const currentTurnColor = gameState.current_turn;
+            
+            if (isCurrentTurn) {
+                statusText.textContent = `Your turn (${currentTurnColor})`;
+                statusIndicator.className = 'status-indicator status-active';
+            } else {
+                statusText.textContent = `${currentTurnColor.charAt(0).toUpperCase() + currentTurnColor.slice(1)}'s turn`;
+                statusIndicator.className = 'status-indicator status-waiting';
+            }
+            
+            // Update spider dice button state
+            updateSpiderDiceButtonState();
+        }
     </script>
 </body>
 </html> 
