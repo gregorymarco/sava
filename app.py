@@ -418,7 +418,6 @@ class Lobby:
             self.game_state['board'][node_id] = piece_name
         
         # Notify all players about the game start
-        print(f"Notifying all players in lobby {self.lobby_id} about game start")
         notify_lobby_update(self.lobby_id, 'game_started', self.game_state)
 
     def auto_start_game(self):
@@ -432,7 +431,6 @@ class Lobby:
         piece_mapping = GAME_CONFIG["initial_piece_placement"]
         
         self.setup_game_board(piece_mapping)
-        print(f"Game auto-started successfully for lobby {self.lobby_id}")
 
     def get_legal_moves_for_piece(self, node_id):
         """Get legal moves for a piece at the given node."""
