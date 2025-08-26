@@ -29,7 +29,6 @@ http://localhost:5000
 Most important:
 - Add spider dice!
 - UI facelift with appropriate assets
-- Harden game logic against refreshes/disconnects
 - Turn timers/chess clock
 - Chat window
 

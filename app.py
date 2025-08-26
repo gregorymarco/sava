@@ -717,12 +717,21 @@ class Lobby:
             }
         }
         
-        # Switch turns
-        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        # If double knives, don't switch turns - player must sacrifice a piece
+        if both_knives:
+            # Set sacrifice mode for the current player
+            self.game_state['sacrifice_mode'] = True
+            self.game_state['sacrifice_player'] = player['color']
+            print(f"🔪🔪 DOUBLE KNIVES! {player['color']} player must sacrifice a piece!")
+        else:
+            # Switch turns for normal results
+            self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
         
         print(f"🎲 {player['color']} player rolled spider dice: {die1} ({'🕷️' if die1_spider else '🔪'}) and {die2} ({'🕷️' if die2_spider else '🔪'})")
         if both_spiders:
-            print(f"🕷️🕷️ DOUBLE SPIDERS! Special effect triggered!")
+            print(f"🕷️🕷️ The spider queen answers your prayers!")
+        elif both_knives:
+            print(f"🔪🔪 {player['color']} player must sacrifice a piece!")
         
         # Notify all players about the dice roll
         notify_lobby_update(self.lobby_id, 'spider_dice_rolled', self.game_state)
@@ -740,8 +749,8 @@ class Lobby:
         if not player:
             return False, "Player not found"
         
-        # Check if it's the current player's turn
-        if player['color'] != self.game_state['current_turn']:
+        # Check if it's the current player's turn OR if they're in sacrifice mode
+        if player['color'] != self.game_state['current_turn'] and not self.game_state.get('sacrifice_mode', False):
             return False, "Not your turn"
         
         # Check if there's a piece at the specified node
@@ -764,14 +773,18 @@ class Lobby:
             'node': node_id
         }
         
-        # Increment the current player's turn counter
-        self.game_state['player_turn_numbers'][player['color']] += 1
-        
-        # Switch turns
-        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
-        
-        print(f"💀 {player['color']} player sacrificed {piece_name} at {node_id}")
-        
+        # Clear sacrifice mode and handle turn switching
+        if self.game_state.get('sacrifice_mode', False):
+            self.game_state['sacrifice_mode'] = False
+            self.game_state['sacrifice_player'] = None
+            # Switch turns after sacrifice - player's turn ends immediately
+            self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        else:
+            # Increment the current player's turn counter for normal sacrifice
+            self.game_state['player_turn_numbers'][player['color']] += 1
+            # Switch turns for normal sacrifice
+            self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+
         # Notify all players about the sacrifice
         notify_lobby_update(self.lobby_id, 'piece_sacrificed', self.game_state)
         
@@ -1054,6 +1067,29 @@ def handle_leave_lobby(data):
         else:
             # Notify remaining players
             notify_lobby_update(lobby_id, 'player_left', {'player_id': player_id})
+
+@socketio.on('sacrifice_piece')
+def handle_sacrifice_piece(data):
+    lobby_id = data.get('lobby_id')
+    node_id = data.get('node_id')
+    player_id = data.get('player_id')
+    
+    print(f'WebSocket: Player {player_id} sacrificing piece at node {node_id} in lobby {lobby_id}')
+    
+    if lobby_id in lobbies:
+        lobby = lobbies[lobby_id]
+        
+        # Sacrifice the piece
+        success, result = lobby.sacrifice_piece(node_id, player_id)
+        
+        if success:
+            # Notify all players about the sacrifice
+            notify_lobby_update(lobby_id, 'piece_sacrificed', result)
+        else:
+            # Send error back to the player
+            emit('sacrifice_error', {'error': result})
+    else:
+        emit('sacrifice_error', {'error': 'Lobby not found'})
 
 @app.route('/')
 def landing():

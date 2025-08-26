@@ -222,6 +222,12 @@
                 console.log('WebSocket update received:', data);
                 handleLobbyUpdate(data);
             });
+            
+            // Listen for sacrifice errors
+            socket.on('sacrifice_error', function(data) {
+                console.error('Sacrifice error:', data.error);
+                document.getElementById('status-text').textContent = 'Sacrifice failed: ' + data.error;
+            });
         }
 
         // Handle lobby updates from WebSocket
@@ -305,6 +311,40 @@
                     updateSpiderDiceButtonState();
                     break;
                     
+                case 'piece_sacrificed':
+                    console.log('Piece sacrificed via WebSocket');
+                    if (gameBoard && lobby_info.game_state.board) {
+                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
+                    }
+                    
+                    // Exit sacrifice mode
+                    if (gameBoard) {
+                        gameBoard.exitSacrificeMode();
+                    }
+                    
+                    // Update status with sacrifice information
+                    const sacrificeMoveInfo = lobby_info.game_state.last_move;
+                    if (sacrificeMoveInfo) {
+                        let statusText = `${sacrificeMoveInfo.player.charAt(0).toUpperCase() + sacrificeMoveInfo.player.slice(1)} sacrificed ${sacrificeMoveInfo.piece}`;
+                        const currentTurn = lobby_info.game_state.current_turn;
+                        statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
+                        document.getElementById('status-text').textContent = statusText;
+                    }
+                    
+                    // Clear any current selection since it's not our turn
+                    gameBoard.clearLegalMoveIndicators();
+                    if (gameBoard.selectedNode) {
+                        gameBoard.selectedNode.classList.remove('selected');
+                        gameBoard.selectedNode = null;
+                    }
+                    
+                    // Update captured pieces display
+                    updateCapturedPieces();
+                    
+                    // Update spider dice button state after sacrifice
+                    updateSpiderDiceButtonState();
+                    break;
+                    
                 case 'spider_dice_rolled':
                     console.log('Spider dice rolled via WebSocket');
                     if (gameBoard && lobby_info.game_state.board) {
@@ -320,6 +360,12 @@
                         
                         if (diceResults.both_spiders) {
                             statusText += ' 🕷️🕷️ DOUBLE SPIDERS! Something special happens!';
+                        } else if (diceResults.both_knives) {
+                            statusText += ' 🔪🔪 DOUBLE KNIVES! Player must sacrifice a piece!';
+                            // Enter sacrifice mode if it's the current player
+                            if (gameBoard && lobby_info.game_state?.sacrifice_mode) {
+                                gameBoard.enterSacrificeMode();
+                            }
                         } else {
                             const spiderCount = (diceResults.die1_spider ? 1 : 0) + (diceResults.die2_spider ? 1 : 0);
                             if (spiderCount === 1) {
@@ -349,35 +395,7 @@
                     updateSpiderDiceButtonState();
                     break;
                     
-                case 'piece_sacrificed':
-                    console.log('Piece sacrificed via WebSocket');
-                    if (gameBoard && lobby_info.game_state.board) {
-                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
-                    }
-                    
-                    // Update status with sacrifice information
-                    const sacrificeMoveInfo = lobby_info.game_state.last_move;
-                    if (sacrificeMoveInfo && sacrificeMoveInfo.move_type === 'piece_sacrificed') {
-                        let statusText = `${sacrificeMoveInfo.player.charAt(0).toUpperCase() + sacrificeMoveInfo.player.slice(1)} sacrificed ${sacrificeMoveInfo.piece}`;
-                        const currentTurn = lobby_info.game_state.current_turn;
-                        statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
-                        
-                        document.getElementById('status-text').textContent = statusText;
-                    }
-                    
-                    // Clear any current selection since it's not our turn
-                    gameBoard.clearLegalMoveIndicators();
-                    if (gameBoard.selectedNode) {
-                        gameBoard.selectedNode.classList.remove('selected');
-                        gameBoard.selectedNode = null;
-                    }
-                    
-                    // Update captured pieces display
-                    updateCapturedPieces();
-                    
-                    // Update spider dice button state after piece sacrifice
-                    updateSpiderDiceButtonState();
-                    break;
+                // Duplicate piece_sacrificed case removed - handled above
                     
                 case 'player_joined':
                     console.log('Player joined via WebSocket:', eventData);
@@ -555,6 +573,7 @@
                 this.wizardFirstNode = null;
                 this.wizardSecondNode = null;
                 this.wizardMoves = [];
+                this.sacrificeMode = false;
                 
                 // Store initial dimensions for resize detection
                 this.lastWidth = window.innerWidth;
@@ -877,6 +896,12 @@
                 // Check if this is a wizard move
                 if (this.selectedNode && this.wizardMode && node.classList.contains('wizard-move-3')) {
                     this.handleWizardMove(nodeId);
+                    return;
+                }
+                
+                // Check if this is a sacrifice move
+                if (this.sacrificeMode && node.classList.contains('sacrifice-candidate')) {
+                    this.sacrificePiece(nodeId);
                     return;
                 }
                 
@@ -1600,6 +1625,12 @@
                             
                             if (diceResults.both_spiders) {
                                 statusText += ' 🕷️🕷️ DOUBLE SPIDERS! Something special happens!';
+                            } else if (diceResults.both_knives) {
+                                statusText += ' 🔪🔪 DOUBLE KNIVES! Player must sacrifice a piece!';
+                                // Enter sacrifice mode if it's the current player
+                                if (gameBoard && lobbyState?.game_state?.sacrifice_mode) {
+                                    gameBoard.enterSacrificeMode();
+                                }
                             } else {
                                 const spiderCount = (diceResults.die1_spider ? 1 : 0) + (diceResults.die2_spider ? 1 : 0);
                                 if (spiderCount === 1) {
@@ -1677,6 +1708,63 @@
                     if (typeof diceMessageInterval !== 'undefined') {
                         clearInterval(diceMessageInterval);
                     }
+                }
+            }
+            
+            enterSacrificeMode() {
+                this.sacrificeMode = true;
+                console.log('🔪 Entering sacrifice mode - player must select a piece to sacrifice');
+                document.getElementById('status-text').textContent = '🔪 Sacrifice a piece... Select one of your own pieces to sacrifice.';
+                
+                // Highlight player's own pieces
+                this.highlightSacrificePieces();
+            }
+            
+            exitSacrificeMode() {
+                this.sacrificeMode = false;
+                console.log('🔪 Exiting sacrifice mode');
+                this.clearSacrificeHighlights();
+            }
+            
+            highlightSacrificePieces() {
+                // Clear any existing highlights
+                this.clearSacrificeHighlights();
+                
+                const currentPlayer = lobbyState?.players.find(p => p.id === playerId);
+                if (!currentPlayer) return;
+                
+                // Highlight all pieces belonging to the current player
+                Object.entries(lobbyState?.game_state?.board || {}).forEach(([nodeId, pieceName]) => {
+                    if (pieceName.startsWith(currentPlayer.color + '_')) {
+                        const node = this.nodes.find(n => n.id === nodeId);
+                        if (node) {
+                            node.element.classList.add('sacrifice-candidate');
+                        }
+                    }
+                });
+            }
+            
+            clearSacrificeHighlights() {
+                this.nodes.forEach(node => {
+                    node.element.classList.remove('sacrifice-candidate');
+                });
+            }
+            
+            async sacrificePiece(nodeId) {
+                try {
+                    const lobbyId = document.getElementById('lobby-id').textContent;
+                    
+                    // Emit websocket event for sacrifice
+                    socket.emit('sacrifice_piece', {
+                        lobby_id: lobbyId,
+                        node_id: nodeId,
+                        player_id: playerId
+                    });
+                    
+                    console.log('🔪 Sacrificing piece at node:', nodeId);
+                } catch (error) {
+                    console.error('Failed to sacrifice piece:', error);
+                    document.getElementById('status-text').textContent = 'Failed to sacrifice piece. Please try again.';
                 }
             }
             
