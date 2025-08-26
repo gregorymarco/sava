@@ -112,6 +112,42 @@ def has_enemy_neighbors(node_id, board_state, current_color):
                 return True
     return False
 
+def would_move_put_matron_in_check(from_node, to_node, board_state, current_color):
+    """Check if a move would put the Matron Mother in check by calculating enemy legal moves."""
+    # Create a temporary board state to simulate the move
+    temp_board = board_state.copy()
+    
+    # Simulate the move
+    if from_node in temp_board:
+        del temp_board[from_node]
+    temp_board[to_node] = f"{current_color}_matron mother"
+    
+    # Find the Matron Mother's position after the move
+    matron_mother_node = to_node
+    
+    # Check if any enemy piece can capture the Matron Mother at the new position
+    enemy_color = 'blue' if current_color == 'red' else 'red'
+    for node, piece in temp_board.items():
+        if piece.startswith(enemy_color + '_'):
+            # Use existing get_legal_moves functions to avoid code duplication
+            if 'orc' in piece:
+                legal_moves = get_legal_moves_for_orc(node, temp_board, enemy_color)
+            elif 'priestess' in piece:
+                legal_moves = get_legal_moves_for_priestess(node, temp_board, enemy_color)
+            elif 'weaponmaster' in piece:
+                legal_moves = get_legal_moves_for_weaponmaster(node, temp_board, enemy_color)
+            elif 'wizard' in piece:
+                legal_moves = get_legal_moves_for_wizard(node, temp_board, enemy_color)
+            else:
+                # For other pieces, use neighboring nodes
+                legal_moves = get_neighboring_nodes(node)
+            
+            # Check if any of these moves would capture the Matron Mother
+            if matron_mother_node in legal_moves:
+                return True  # Move would put Matron Mother in check
+    
+    return False  # Move is safe
+
 def get_legal_moves_for_orc(node_id, board_state, current_color):
     """Calculate legal moves for an Orc piece."""
     legal_moves = set()
@@ -220,12 +256,8 @@ def get_legal_moves_for_matron_mother(node_id, board_state, current_color):
             if piece_name.startswith(current_color + '_'):
                 continue
         
-        # Check if this move would put the king in check
-        # TODO: Implement check evaluation
-        # For now, allow all moves
-        is_in_check_after_move = False  # Placeholder for check evaluation
-        
-        if not is_in_check_after_move:
+        # Check if this move would put the Matron Mother in check
+        if not would_move_put_matron_in_check(node_id, neighbor_id, board_state, current_color):
             legal_moves.add(neighbor_id)
     
     return list(legal_moves)
@@ -363,12 +395,28 @@ class Lobby:
 
     def add_player(self, player_id, player_name):
         if len(self.players) < 2:
+            # Check which color slots are available
+            red_slot_occupied = any(p['color'] == 'red' for p in self.players)
+            blue_slot_occupied = any(p['color'] == 'blue' for p in self.players)
+            
+            # Assign player to the first available color slot
+            if not red_slot_occupied:
+                assigned_color = 'red'
+            elif not blue_slot_occupied:
+                assigned_color = 'blue'
+            else:
+                # Both slots are occupied (shouldn't happen with len < 2 check, but just in case)
+                assigned_color = 'red' if len(self.players) == 0 else 'blue'
+            
+            current_players_str = ', '.join([f"{p['id']}:{p['color']}" for p in self.players])
+           
             self.players.append({
                 'id': player_id,
                 'name': player_name,
-                'color': 'red' if len(self.players) == 0 else 'blue',
+                'color': assigned_color,
                 'joined_at': datetime.now()
-            })       
+            })
+            
             return 'player'
         else:
             self.spectators.append({

@@ -256,7 +256,6 @@
                 document.getElementById('status-text').textContent = 
                     `Game in progress - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
                 document.getElementById('status-indicator').className = 'status-indicator status-playing';
-                document.getElementById('start-game-btn').disabled = true;
                 
                 // Update spider dice button state when game starts
                 updateSpiderDiceButtonState();
@@ -515,8 +514,6 @@
             }
         }
 
-
-
         // Update captured pieces display
         function updateCapturedPieces() {
             if (!lobbyState || !lobbyState.game_state || !lobbyState.game_state.captured_pieces) return;            
@@ -634,21 +631,12 @@
                         const currentSelection = this.selectedNode ? this.selectedNode.getAttribute('data-id') : null;
                         const currentWeaponmasterMode = this.weaponmasterMode;
                         const currentWizardMode = this.wizardMode;
-                        
-                        devLog('💾 Stored game state for restoration:', {
-                            boardState: currentBoardState,
-                            selection: currentSelection,
-                            weaponmasterMode: currentWeaponmasterMode,
-                            wizardMode: currentWizardMode
-                        });
-                        
+                     
                         // Re-initialize board to apply new scaling
                         this.initializeBoard();
-                        devLog('✅ Board reinitialized with new dimensions');
                         
                         // Restore game state after reinitializing
                         if (Object.keys(currentBoardState).length > 0) {
-                            console.log('🔄 Restoring game state after resize:', currentBoardState);
                             this.updateBoardWithPieces(currentBoardState);
                             
                             // Restore selection if there was one
@@ -657,7 +645,6 @@
                                 if (nodeToSelect) {
                                     nodeToSelect.element.classList.add('selected');
                                     this.selectedNode = nodeToSelect.element;
-                                    console.log('✅ Selection restored:', currentSelection);
                                     
                                     // Restore special move modes
                                     if (currentWeaponmasterMode) {
@@ -667,11 +654,9 @@
                                     } else if (currentWizardMode) {
                                         this.wizardMode = true;
                                         this.getLegalMoves(currentSelection);
-                                        console.log('🔮 Wizard mode restored');
                                     } else {
                                         // Regular piece selection - get legal moves
                                         this.getLegalMoves(currentSelection);
-                                        console.log('✅ Legal moves restored for regular piece');
                                     }
                                 } else {
                                     console.warn('⚠️ Could not restore selection - node not found:', currentSelection);
@@ -699,7 +684,6 @@
             }
 
             initializeBoard() {
-                console.log('🔄 Initializing board...');
                 this.board.innerHTML = '';
                 this.nodes = [];
                 
