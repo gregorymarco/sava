@@ -228,6 +228,18 @@
                 console.error('Sacrifice error:', data.error);
                 document.getElementById('status-text').textContent = 'Sacrifice failed: ' + data.error;
             });
+            
+            // Listen for spider control errors
+            socket.on('spider_control_error', function(data) {
+                console.error('Spider control error:', data.error);
+                document.getElementById('status-text').textContent = 'Spider control failed: ' + data.error;
+            });
+            
+            // Listen for controlled move errors
+            socket.on('controlled_move_error', function(data) {
+                console.error('Controlled move error:', data.error);
+                document.getElementById('status-text').textContent = 'Controlled move failed: ' + data.error;
+            });
         }
 
         // Handle lobby updates from WebSocket
@@ -344,6 +356,64 @@
                     updateSpiderDiceButtonState();
                     break;
                     
+                case 'enemy_piece_controlled':
+                    console.log('Enemy piece controlled via WebSocket');
+                    if (gameBoard && lobby_info.game_state.board) {
+                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
+                    }
+                    
+                    // Highlight the controlled piece
+                    const controlledNode = lobby_info.game_state.controlled_piece_node;
+                    if (gameBoard && controlledNode) {
+                        gameBoard.highlightControlledPiece(controlledNode);
+                    }
+                    
+                    // Update status with control information
+                    const controlMoveInfo = lobby_info.game_state.last_move;
+                    if (controlMoveInfo) {
+                        let statusText = `${controlMoveInfo.player.charAt(0).toUpperCase() + controlMoveInfo.player.slice(1)} took control of ${controlMoveInfo.controlled_piece}`;
+                        statusText += '. Now move the controlled piece.';
+                        document.getElementById('status-text').textContent = statusText;
+                    }
+                    break;
+                    
+                case 'controlled_piece_moved':
+                    console.log('Controlled piece moved via WebSocket');
+                    if (gameBoard && lobby_info.game_state.board) {
+                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
+                    }
+                    
+                    // Exit spider control mode
+                    if (gameBoard) {
+                        gameBoard.exitSpiderControlMode();
+                    }
+                    
+                    // Update status with move information
+                    const controlledMoveInfo = lobby_info.game_state.last_move;
+                    if (controlledMoveInfo) {
+                        let statusText = `${controlledMoveInfo.player.charAt(0).toUpperCase() + controlledMoveInfo.player.slice(1)} moved controlled ${controlledMoveInfo.piece}`;
+                        if (controlledMoveInfo.captured && controlledMoveInfo.captured.length > 0) {
+                            statusText += ` and captured ${controlledMoveInfo.captured.join(', ')}`;
+                        }
+                        const currentTurn = lobby_info.game_state.current_turn;
+                        statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
+                        document.getElementById('status-text').textContent = statusText;
+                    }
+                    
+                    // Clear any current selection since it's not our turn
+                    gameBoard.clearLegalMoveIndicators();
+                    if (gameBoard.selectedNode) {
+                        gameBoard.selectedNode.classList.remove('selected');
+                        gameBoard.selectedNode = null;
+                    }
+                    
+                    // Update captured pieces display
+                    updateCapturedPieces();
+                    
+                    // Update spider dice button state
+                    updateSpiderDiceButtonState();
+                    break;
+                    
                 case 'spider_dice_rolled':
                     console.log('Spider dice rolled via WebSocket');
                     if (gameBoard && lobby_info.game_state.board) {
@@ -358,12 +428,24 @@
                         statusText += `${diceResults.die1_spider ? '🕷️' : '🔪'} and ${diceResults.die2_spider ? '🕷️' : '🔪'}`;
                         
                         if (diceResults.both_spiders) {
-                            statusText += ' 🕷️🕷️ DOUBLE SPIDERS! Something special happens!';
+                            statusText += ' 🕷️🕷️ DOUBLE SPIDERS! Player can control an enemy piece!';
+                            // Enter spider control mode only if the current local player is the one who should control
+                            if (gameBoard && lobby_info.game_state?.spider_control_mode) {
+                                const currentPlayer = lobby_info.players?.find(p => p.id === playerId);
+                                const spiderControlPlayer = lobby_info.game_state?.spider_control_player;
+                                if (currentPlayer && currentPlayer.color === spiderControlPlayer) {
+                                    gameBoard.enterSpiderControlMode();
+                                }
+                            }
                         } else if (diceResults.both_knives) {
                             statusText += ' 🔪🔪 DOUBLE KNIVES! Player must sacrifice a piece!';
-                            // Enter sacrifice mode if it's the current player
+                            // Enter sacrifice mode only if the current local player is the one who must sacrifice
                             if (gameBoard && lobby_info.game_state?.sacrifice_mode) {
-                                gameBoard.enterSacrificeMode();
+                                const currentPlayer = lobby_info.players?.find(p => p.id === playerId);
+                                const sacrificePlayer = lobby_info.game_state?.sacrifice_player;
+                                if (currentPlayer && currentPlayer.color === sacrificePlayer) {
+                                    gameBoard.enterSacrificeMode();
+                                }
                             }
                         } else {
                             const spiderCount = (diceResults.die1_spider ? 1 : 0) + (diceResults.die2_spider ? 1 : 0);
@@ -432,14 +514,14 @@
             if (!lobbyState) return;
 
             // Update player count
-            const playerCount = lobbyState.players.length;
+            const playerCount = lobbyState.players?.length || 0;
             document.querySelector('.player-section h3').textContent = `Players (${playerCount}/2)`;
 
             // Update player list
             const playerList = document.getElementById('player-list');
             playerList.innerHTML = '';
             
-            if (lobbyState.players.length === 0) {
+            if (!lobbyState.players || lobbyState.players.length === 0) {
                 playerList.innerHTML = '<li class="player-item">Waiting for players to join...</li>';
             } else {
                 lobbyState.players.forEach(player => {
@@ -491,7 +573,7 @@
                 // Game is already started
                 statusIndicator.className = 'status-indicator status-playing';
                 const currentTurn = lobbyState.game_state.current_turn;
-                const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+                const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
                 if (currentPlayer) {
                     const playerTurnCount = lobbyState.game_state.player_turn_numbers?.[currentPlayer.color] || 0;
                     statusText.textContent = `Game in progress - Your turn count: ${playerTurnCount} - ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn`;
@@ -571,6 +653,11 @@
                 this.wizardSecondNode = null;
                 this.wizardMoves = [];
                 this.sacrificeMode = false;
+                this.spiderControlMode = false;
+                this.controlledPieceNode = null;
+                this.controlledWeaponmasterMode = false;
+                this.controlledWeaponmasterMoves = [];
+                this.controlledFirstNode = null;
                 
                 // Store initial dimensions for resize detection
                 this.lastWidth = window.innerWidth;
@@ -857,6 +944,8 @@
                 console.log('Node clicked:', nodeId);
                 console.log('Current lobby state:', lobbyState);
                 console.log('Player role:', playerRole);
+                console.log('🕷️ Spider control mode:', this.spiderControlMode);
+                console.log('🕷️ Controlled piece node:', this.controlledPieceNode);
                 
                 // Only allow moves if player is a player (not spectator) and it's their turn
                 if (playerRole !== 'player') {
@@ -864,10 +953,33 @@
                     return;
                 }
                 
+                // Check if this is a controlled weaponmaster move
+                if (this.controlledWeaponmasterMode && this.selectedNode && this.selectedNode.getAttribute('data-id') === this.controlledPieceNode) {
+                    if ((node.classList.contains('first-move') || node.classList.contains('second-move'))) {
+                        this.handleControlledWeaponmasterMove(nodeId);
+                        return;
+                    }
+                }
+                
                 // Check if this is a legal move for a previously selected piece
                 if (this.selectedNode && node.classList.contains('legal-move')) {
-                    // Regular piece move
-                    this.executeMove(this.selectedNode.getAttribute('data-id'), nodeId, playerId);
+                    const selectedNodeId = this.selectedNode.getAttribute('data-id');
+                    
+                    // Check if this is a controlled piece move (non-weaponmaster)
+                    if (this.controlledPieceNode === selectedNodeId && !this.controlledWeaponmasterMode) {
+                        // Check if this node has a stored move path (for complex moves like weaponmaster)
+                        const movePath = node.getAttribute('data-move-path');
+                        if (movePath) {
+                            console.log('🕷️ Executing controlled complex move with path:', movePath);
+                            this.moveControlledPiece(selectedNodeId, movePath);
+                        } else {
+                            console.log('🕷️ Executing controlled simple move:', selectedNodeId, '->', nodeId);
+                            this.moveControlledPiece(selectedNodeId, nodeId);
+                        }
+                    } else {
+                        // Regular piece move
+                        this.executeMove(selectedNodeId, nodeId, playerId);
+                    }
                     return;
                 }
                 
@@ -885,7 +997,21 @@
                 
                 // Check if this is a sacrifice move
                 if (this.sacrificeMode && node.classList.contains('sacrifice-candidate')) {
-                    this.sacrificePiece(nodeId);
+                    // Double-check that this is the correct player who should sacrifice
+                    const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
+                    const sacrificePlayer = lobbyState?.game_state?.sacrifice_player;
+                    if (currentPlayer && currentPlayer.color === sacrificePlayer) {
+                        this.sacrificePiece(nodeId);
+                    } else {
+                        console.log('🔪 Not the sacrifice player, ignoring sacrifice attempt');
+                        document.getElementById('status-text').textContent = 'Only the player who rolled double knives can sacrifice';
+                    }
+                    return;
+                }
+                
+                // Check if this is a spider control move (selecting enemy piece to control)
+                if (this.spiderControlMode && !this.controlledPieceNode && node.classList.contains('spider-control-candidate')) {
+                    this.controlEnemyPiece(nodeId);
                     return;
                 }
                 
@@ -933,7 +1059,7 @@
                     }
                     
                     // Find the current player's color from the lobby state
-                    const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+                    const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
                     if (!currentPlayer) {
                         console.error('Current player not found in lobby state');
                         document.getElementById('status-text').textContent = 'Game state error: player not found';
@@ -944,6 +1070,24 @@
                     console.log('Player color:', playerColor);
                     console.log('Current turn:', currentTurn);
                     
+                    // Check if it's the player's turn OR if we're in spider control mode and it's our spider control
+                    const isMyTurn = currentTurn === playerColor;
+                    const spiderControlMode = lobbyState?.game_state?.spider_control_mode || false;
+                    const spiderControlPlayer = lobbyState?.game_state?.spider_control_player;
+                    const isMySpiderControl = spiderControlMode && spiderControlPlayer === playerColor;
+                    
+                    console.log('Is my turn:', isMyTurn);
+                    console.log('Spider control mode:', spiderControlMode);
+                    console.log('Spider control player:', spiderControlPlayer);
+                    console.log('Is my spider control:', isMySpiderControl);
+                    
+                    // Don't allow moves if it's not our turn and we're not in spider control
+                    if (!isMyTurn && !isMySpiderControl) {
+                        console.log('Not player turn and not spider control - blocking move');
+                        document.getElementById('status-text').textContent = `It's ${currentTurn}'s turn. Wait for your turn.`;
+                        return;
+                    }
+                    
                     // Check if this piece belongs to the current player (not the current turn)
                     // Piece names can be: "red_matron mother", "red_orc_0", "blue_wizard", etc.
                     const isFriendlyPiece = pieceName.startsWith(playerColor + '_') || pieceName.startsWith(playerColor + ' ');
@@ -953,9 +1097,19 @@
                     console.log('Player color + " ":', playerColor + ' ');
                     console.log('Is friendly piece:', isFriendlyPiece);
                     
-                    if (isFriendlyPiece) {
-                        // This is the player's piece - select it and show legal moves
-                        console.log('Selecting friendly piece, getting legal moves');
+                    // Check if this is a controlled piece (can select enemy pieces when controlled)
+                    const isControlledPiece = this.controlledPieceNode === nodeId;
+                    console.log('🕷️ CONTROLLED PIECE DEBUG:');
+                    console.log('🕷️ Controlled piece node:', this.controlledPieceNode);
+                    console.log('🕷️ Current node clicked:', nodeId);
+                    console.log('🕷️ Is controlled piece:', isControlledPiece);
+                    console.log('🕷️ Spider control mode:', this.spiderControlMode);
+                    console.log('🕷️ Lobby spider control mode:', spiderControlMode);
+                    console.log('🕷️ Lobby spider control player:', spiderControlPlayer);
+                    
+                    if (isFriendlyPiece || isControlledPiece) {
+                        // This is the player's piece or a controlled enemy piece - select it and show legal moves
+                        console.log('Selecting piece (friendly or controlled), getting legal moves');
                         node.classList.add('selected');
                         this.selectedNode = node;
                         
@@ -975,9 +1129,14 @@
                             console.log('Wizard piece selected:', pieceName);
                         }
                         
-                        this.getLegalMoves(nodeId);
+                        // Use appropriate method to get legal moves
+                        if (isControlledPiece) {
+                            this.getLegalMovesForControlledPiece(nodeId);
+                        } else {
+                            this.getLegalMoves(nodeId);
+                        }
                     } else {
-                        // This is an enemy piece - don't select it
+                        // This is an enemy piece - don't select it (unless it's spider control mode)
                         console.log('Enemy piece clicked, not selecting');
                         document.getElementById('status-text').textContent = 
                             `Cannot select enemy piece. You can only select your own pieces.`;
@@ -1067,7 +1226,22 @@
                         }
                         
                         // Update local lobby state to match server
-                        lobbyState = data.game_state;
+                        if (data.lobby_info) {
+                            // Use the full lobby info from the API response
+                            lobbyState = data.lobby_info;
+                        } else {
+                            // Fallback: update just the game state if lobby_info not available
+                            if (lobbyState) {
+                                lobbyState.game_state = data.game_state;
+                            } else {
+                                console.warn('lobbyState not initialized, creating minimal structure');
+                                lobbyState = {
+                                    game_state: data.game_state,
+                                    players: [],
+                                    spectators: []
+                                };
+                            }
+                        }
                         
                         // Force update of captured pieces display
                         updateCapturedPieces();
@@ -1099,7 +1273,7 @@
                     
                     if (pieceName && currentTurn) {
                         // Find the current player's color
-                        const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+                        const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
                         if (currentPlayer) {
                             const playerColor = currentPlayer.color;
                             const isFriendlyPiece = pieceName.startsWith(playerColor + '_') || pieceName.startsWith(playerColor + ' ');
@@ -1161,6 +1335,56 @@
                         node.element.classList.add('legal-move');
                     }
                 });
+            }
+            
+            highlightControlledPieceMoves(legalMoves) {
+                console.log('🕷️ Highlighting controlled piece moves:', legalMoves);
+                
+                // Check if the controlled piece is a weaponmaster
+                const boardState = lobbyState?.game_state?.board || {};
+                const controlledPieceName = boardState[this.controlledPieceNode];
+                const isWeaponmaster = controlledPieceName && controlledPieceName.includes('weaponmaster');
+                
+                console.log('🕷️ Controlled piece:', controlledPieceName, 'Is weaponmaster:', isWeaponmaster);
+                
+                if (isWeaponmaster && legalMoves.some(move => move.includes('->'))) {
+                    // Use weaponmaster-style highlighting for path selection
+                    console.log('🕷️ Using weaponmaster highlighting for controlled piece');
+                    this.controlledWeaponmasterMode = true;
+                    this.controlledWeaponmasterMoves = legalMoves;
+                    this.highlightWeaponmasterMoves(legalMoves);
+                    document.getElementById('status-text').textContent = 
+                        '🕷️ Controlled weaponmaster selected. Click a light green node to start your move, then a dark green node to complete it.';
+                } else {
+                    // Use simple highlighting for non-weaponmaster pieces
+                    this.controlledWeaponmasterMode = false;
+                    legalMoves.forEach(move => {
+                        if (move.includes('->')) {
+                            // Complex move (non-weaponmaster) - highlight the final destination
+                            const nodes = move.split('->');
+                            const finalDestination = nodes[nodes.length - 1]; // Last node in the path
+                            
+                            const node = this.nodes.find(n => n.id === finalDestination);
+                            if (node) {
+                                node.element.classList.add('legal-move');
+                                // Store the full move path on the node for later use
+                                node.element.setAttribute('data-move-path', move);
+                                console.log('🕷️ Highlighted complex move destination:', finalDestination, 'for path:', move);
+                            } else {
+                                console.warn('🕷️ Node not found for complex move destination:', finalDestination);
+                            }
+                        } else {
+                            // Simple move - highlight directly
+                            const node = this.nodes.find(n => n.id === move);
+                            if (node) {
+                                node.element.classList.add('legal-move');
+                                console.log('🕷️ Highlighted simple move:', move);
+                            } else {
+                                console.warn('🕷️ Node not found for simple move:', move);
+                            }
+                        }
+                    });
+                }
             }
             
             highlightWeaponmasterMoves(legalMoves) {
@@ -1271,6 +1495,52 @@
                 }
             }
             
+            handleControlledWeaponmasterMove(nodeId) {
+                if (!this.controlledFirstNode) {
+                    // First node selection for controlled weaponmaster
+                    if (this.nodes.find(n => n.id === nodeId)?.element.classList.contains('first-move')) {
+                        this.controlledFirstNode = nodeId;
+                        
+                        // Highlight the selected first node
+                        const firstNodeElement = this.nodes.find(n => n.id === nodeId)?.element;
+                        if (firstNodeElement) {
+                            firstNodeElement.classList.remove('first-move');
+                            firstNodeElement.classList.add('selected');
+                        }
+                        
+                        // Clear first move indicators and show only valid second moves for controlled piece
+                        this.clearLegalMoveIndicators();
+                        this.showValidSecondMovesForControlled(nodeId);
+                        
+                        document.getElementById('status-text').textContent = 
+                            `🕷️ Controlled weaponmaster first node selected: ${nodeId}. Now click a dark green node to complete the move.`;
+                        
+                        console.log('🕷️ Controlled weaponmaster first node selected:', nodeId);
+                    } else {
+                        document.getElementById('status-text').textContent = 
+                            `🕷️ Please click a light green node first to start your controlled weaponmaster move.`;
+                    }
+                } else {
+                    // Second node selection for controlled weaponmaster
+                    if (this.nodes.find(n => n.id === nodeId)?.element.classList.contains('second-move')) {
+                        // Execute the complete controlled weaponmaster move
+                        const movePath = `${this.controlledFirstNode}->${nodeId}`;
+                        console.log('🕷️ Executing controlled weaponmaster move:', movePath);
+                        
+                        // Reset controlled weaponmaster state
+                        this.controlledWeaponmasterMode = false;
+                        this.controlledFirstNode = null;
+                        this.controlledWeaponmasterMoves = [];
+                        
+                        // Execute the controlled move
+                        this.moveControlledPiece(this.controlledPieceNode, movePath);
+                    } else {
+                        document.getElementById('status-text').textContent = 
+                            `🕷️ Please click a dark green node to complete your controlled weaponmaster move.`;
+                    }
+                }
+            }
+            
             showValidSecondMoves(firstNodeId) {
                 // Find all valid second nodes for the selected first node
                 const validSecondNodes = new Set();
@@ -1293,6 +1563,30 @@
                 });
                 
                 console.log('Valid second moves shown for', firstNodeId, ':', Array.from(validSecondNodes));
+            }
+            
+            showValidSecondMovesForControlled(firstNodeId) {
+                // Find all valid second nodes for the selected first node in controlled weaponmaster moves
+                const validSecondNodes = new Set();
+                
+                this.controlledWeaponmasterMoves.forEach(move => {
+                    if (move.includes('->')) {
+                        const [firstNode, secondNode] = move.split('->');
+                        if (firstNode === firstNodeId) {
+                            validSecondNodes.add(secondNode);
+                        }
+                    }
+                });
+                
+                // Highlight valid second nodes
+                validSecondNodes.forEach(nodeId => {
+                    const node = this.nodes.find(n => n.id === nodeId);
+                    if (node) {
+                        node.element.classList.add('second-move');
+                    }
+                });
+                
+                console.log('🕷️ Valid second moves shown for controlled weaponmaster', firstNodeId, ':', Array.from(validSecondNodes));
             }
             
             cancelWeaponmasterMove() {
@@ -1350,6 +1644,8 @@
                     node.element.classList.remove('first-move');
                     node.element.classList.remove('second-move');
                     node.element.classList.remove('wizard-move-3');
+                    // Clear stored move paths for controlled pieces
+                    node.element.removeAttribute('data-move-path');
                 });
             }
 
@@ -1511,7 +1807,7 @@
                     });
                     
                     // Check if it's the current player's turn
-                    const currentPlayer = lobbyState?.players.find(p => p.id === playerId);
+                    const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
                     if (!currentPlayer) {
                         document.getElementById('status-text').textContent = 'Error: Player not found';
                         return;
@@ -1608,12 +1904,24 @@
                             statusText += `${diceResults.die1_spider ? '🕷️' : '🔪'} and ${diceResults.die2_spider ? '🕷️' : '🔪'}`;
                             
                             if (diceResults.both_spiders) {
-                                statusText += ' 🕷️🕷️ DOUBLE SPIDERS! Something special happens!';
+                                statusText += ' 🕷️🕷️ DOUBLE SPIDERS! Player can control an enemy piece!';
+                                // Enter spider control mode only if the current local player is the one who should control
+                                if (gameBoard && lobbyState?.game_state?.spider_control_mode) {
+                                    const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
+                                    const spiderControlPlayer = lobbyState.game_state?.spider_control_player;
+                                    if (currentPlayer && currentPlayer.color === spiderControlPlayer) {
+                                        gameBoard.enterSpiderControlMode();
+                                    }
+                                }
                             } else if (diceResults.both_knives) {
                                 statusText += ' 🔪🔪 DOUBLE KNIVES! Player must sacrifice a piece!';
-                                // Enter sacrifice mode if it's the current player
+                                // Enter sacrifice mode only if the current local player is the one who must sacrifice
                                 if (gameBoard && lobbyState?.game_state?.sacrifice_mode) {
-                                    gameBoard.enterSacrificeMode();
+                                    const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
+                                    const sacrificePlayer = lobbyState.game_state?.sacrifice_player;
+                                    if (currentPlayer && currentPlayer.color === sacrificePlayer) {
+                                        gameBoard.enterSacrificeMode();
+                                    }
                                 }
                             } else {
                                 const spiderCount = (diceResults.die1_spider ? 1 : 0) + (diceResults.die2_spider ? 1 : 0);
@@ -1645,7 +1953,22 @@
                         }
                         
                         // Update local lobby state
-                        lobbyState = data.game_state;
+                        if (data.lobby_info) {
+                            // Use the full lobby info from the API response
+                            lobbyState = data.lobby_info;
+                        } else {
+                            // Fallback: update just the game state if lobby_info not available
+                            if (lobbyState) {
+                                lobbyState.game_state = data.game_state;
+                            } else {
+                                console.warn('lobbyState not initialized, creating minimal structure');
+                                lobbyState = {
+                                    game_state: data.game_state,
+                                    players: [],
+                                    spectators: []
+                                };
+                            }
+                        }
                         
                         // Update captured pieces display
                         updateCapturedPieces();
@@ -1698,10 +2021,18 @@
             enterSacrificeMode() {
                 this.sacrificeMode = true;
                 console.log('🔪 Entering sacrifice mode - player must select a piece to sacrifice');
-                document.getElementById('status-text').textContent = '🔪 Sacrifice a piece... Select one of your own pieces to sacrifice.';
                 
-                // Highlight player's own pieces
-                this.highlightSacrificePieces();
+                // Check if we are the sacrifice player
+                const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
+                const sacrificePlayer = lobbyState?.game_state?.sacrifice_player;
+                
+                if (currentPlayer && currentPlayer.color === sacrificePlayer) {
+                    document.getElementById('status-text').textContent = '🔪 Sacrifice a piece... Select one of your own pieces to sacrifice.';
+                    // Highlight player's own pieces
+                    this.highlightSacrificePieces();
+                } else {
+                    document.getElementById('status-text').textContent = `🔪 ${sacrificePlayer} player must sacrifice a piece (you rolled double knives).`;
+                }
             }
             
             exitSacrificeMode() {
@@ -1714,12 +2045,19 @@
                 // Clear any existing highlights
                 this.clearSacrificeHighlights();
                 
-                const currentPlayer = lobbyState?.players.find(p => p.id === playerId);
+                const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
                 if (!currentPlayer) return;
                 
-                // Highlight all pieces belonging to the current player
+                // Check if the current local player is the one who should sacrifice
+                const sacrificePlayer = lobbyState?.game_state?.sacrifice_player;
+                if (!sacrificePlayer || currentPlayer.color !== sacrificePlayer) {
+                    console.log('🔪 Not the sacrifice player, no highlighting');
+                    return;
+                }
+                
+                // Highlight all pieces belonging to the sacrifice player
                 Object.entries(lobbyState?.game_state?.board || {}).forEach(([nodeId, pieceName]) => {
-                    if (pieceName.startsWith(currentPlayer.color + '_')) {
+                    if (pieceName.startsWith(sacrificePlayer + '_')) {
                         const node = this.nodes.find(n => n.id === nodeId);
                         if (node) {
                             node.element.classList.add('sacrifice-candidate');
@@ -1749,6 +2087,128 @@
                 } catch (error) {
                     console.error('Failed to sacrifice piece:', error);
                     document.getElementById('status-text').textContent = 'Failed to sacrifice piece. Please try again.';
+                }
+            }
+            
+            enterSpiderControlMode() {
+                this.spiderControlMode = true;
+                console.log('🕷️ Entering spider control mode - player must select an enemy piece to control');
+                document.getElementById('status-text').textContent = '🕷️ Control an enemy piece... Select an enemy piece to take control of.';
+                
+                // Highlight enemy pieces
+                this.highlightEnemyPieces();
+            }
+            
+            exitSpiderControlMode() {
+                this.spiderControlMode = false;
+                this.controlledPieceNode = null;
+                this.controlledWeaponmasterMode = false;
+                this.controlledWeaponmasterMoves = [];
+                this.controlledFirstNode = null;
+                console.log('🕷️ Exiting spider control mode');
+                this.clearSpiderControlHighlights();
+            }
+            
+            highlightEnemyPieces() {
+                // Clear any existing highlights
+                this.clearSpiderControlHighlights();
+                
+                const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
+                if (!currentPlayer) return;
+                
+                const enemyColor = currentPlayer.color === 'red' ? 'blue' : 'red';
+                
+                // Highlight all pieces belonging to the enemy (except matron mother)
+                Object.entries(lobbyState?.game_state?.board || {}).forEach(([nodeId, pieceName]) => {
+                    if (pieceName.startsWith(enemyColor + '_') && !pieceName.includes('matron mother')) {
+                        const node = this.nodes.find(n => n.id === nodeId);
+                        if (node) {
+                            node.element.classList.add('spider-control-candidate');
+                        }
+                    }
+                });
+            }
+            
+            clearSpiderControlHighlights() {
+                this.nodes.forEach(node => {
+                    node.element.classList.remove('spider-control-candidate');
+                    node.element.classList.remove('controlled-piece');
+                });
+            }
+            
+            async controlEnemyPiece(nodeId) {
+                try {
+                    const lobbyId = document.getElementById('lobby-id').textContent;
+                    
+                    // Emit websocket event for control
+                    socket.emit('control_enemy_piece', {
+                        lobby_id: lobbyId,
+                        node_id: nodeId,
+                        player_id: playerId
+                    });
+                    
+                    console.log('🕷️ Taking control of enemy piece at node:', nodeId);
+                } catch (error) {
+                    console.error('Failed to control enemy piece:', error);
+                    document.getElementById('status-text').textContent = 'Failed to control enemy piece. Please try again.';
+                }
+            }
+            
+            highlightControlledPiece(nodeId) {
+                // Clear existing highlights
+                this.clearSpiderControlHighlights();
+                
+                // Highlight the controlled piece
+                const node = this.nodes.find(n => n.id === nodeId);
+                if (node) {
+                    node.element.classList.add('controlled-piece');
+                    this.controlledPieceNode = nodeId;
+                }
+                
+                console.log('🕷️ Controlled piece highlighted at:', nodeId);
+                document.getElementById('status-text').textContent = '🕷️ Move the controlled piece... Click the controlled piece to select it, then click destination.';
+            }
+            
+            async moveControlledPiece(fromNode, toNode) {
+                try {
+                    const lobbyId = document.getElementById('lobby-id').textContent;
+                    
+                    // Emit websocket event for controlled move
+                    socket.emit('move_controlled_piece', {
+                        lobby_id: lobbyId,
+                        from_node: fromNode,
+                        to_node: toNode,
+                        player_id: playerId
+                    });
+                    
+                    console.log('🕷️ Moving controlled piece from', fromNode, 'to', toNode);
+                } catch (error) {
+                    console.error('Failed to move controlled piece:', error);
+                    document.getElementById('status-text').textContent = 'Failed to move controlled piece. Please try again.';
+                }
+            }
+            
+            async getLegalMovesForControlledPiece(nodeId) {
+                try {
+                    console.log('🕷️ Getting legal moves for controlled piece:', nodeId);
+                    // For controlled pieces, we get legal moves using the original piece logic
+                    // but we'll allow moves that would normally be illegal (like capturing allies)
+                    const lobbyId = document.getElementById('lobby-id').textContent;
+                    console.log('🕷️ Fetching from API:', `/api/lobby/${lobbyId}/legal-moves/${nodeId}`);
+                    const response = await fetch(`/api/lobby/${lobbyId}/legal-moves/${nodeId}`);
+                    const data = await response.json();
+                    
+                    console.log('🕷️ API response:', data);
+                    
+                    if (data.legal_moves && data.legal_moves.length > 0) {
+                        console.log('🕷️ Showing legal moves:', data.legal_moves);
+                        this.highlightControlledPieceMoves(data.legal_moves);
+                        console.log('🕷️ Legal moves for controlled piece displayed:', data.legal_moves);
+                    } else {
+                        console.log('🕷️ No legal moves returned for controlled piece');
+                    }
+                } catch (error) {
+                    console.error('Failed to get legal moves for controlled piece:', error);
                 }
             }
             
@@ -2197,7 +2657,7 @@
         // Game over handling functions
         function handleGameOver(gameData) {
             const { winner, game_end_reason } = gameData;
-            const currentPlayer = lobbyState?.players.find(p => p.id === playerId);
+            const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
             
             if (!currentPlayer) return;
             
@@ -2239,7 +2699,7 @@
 
         function showGameOverOverlay(gameData) {
             const { winner, game_end_reason } = gameData;
-            const currentPlayer = lobbyState?.players.find(p => p.id === playerId);
+            const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
             
             let title = 'Game Over';
             let message = 'The game has ended';
@@ -2494,7 +2954,7 @@
             }
             
             const gameState = lobbyState.game_state;
-            const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+            const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
             
             if (!currentPlayer) {
                 console.log('🎲 Current player not found');
@@ -2518,11 +2978,12 @@
                 shouldEnable = false;
                 reason = 'Not your turn';
             } else {
-                // Check turn number requirement (must be at least turn 3)
+                // Check turn number requirement using game config
+                const spiderDiceMinTurn = GAME_CONFIG?.game_rules?.spider_dice_min_turn || 3;
                 const playerTurnCount = gameState.player_turn_numbers?.[currentPlayer.color] || 0;
-                if (playerTurnCount < 3) {
+                if (playerTurnCount < spiderDiceMinTurn) {
                     shouldEnable = false;
-                    reason = `Must wait until turn ${3 - playerTurnCount} more`;
+                    reason = `Must wait until turn ${spiderDiceMinTurn - playerTurnCount} more`;
                 } else {
                     shouldEnable = true;
                     reason = 'Ready to roll';
@@ -2535,7 +2996,8 @@
                 player_turn_count: gameState.player_turn_numbers?.[currentPlayer.color] || 0,
                 current_turn: gameState.current_turn,
                 player_color: currentPlayer.color,
-                explanation: `Player has completed ${gameState.player_turn_numbers?.[currentPlayer.color] || 0} turns - needs 3 to use spider dice`
+                spider_dice_min_turn: GAME_CONFIG?.game_rules?.spider_dice_min_turn || 3,
+                explanation: `Player has completed ${gameState.player_turn_numbers?.[currentPlayer.color] || 0} turns - needs ${GAME_CONFIG?.game_rules?.spider_dice_min_turn || 3} to use spider dice`
             });
             
             // Update button state
@@ -2568,7 +3030,7 @@
                 return;
             }
             
-            const currentPlayer = lobbyState.players.find(p => p.id === playerId);
+            const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
             if (!currentPlayer) {
                 statusText.textContent = 'Error: Player not found';
                 return;

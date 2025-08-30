@@ -52,7 +52,8 @@
     },
     "game_rules": {
         "max_players": 2,
-        "auto_start_threshold": 2
+        "auto_start_threshold": 2,
+        "spider_dice_min_turn": 3
     },
     "development": {
         "_comment": "Set enabled to false for production builds to hide all dev features",

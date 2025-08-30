@@ -39,6 +39,7 @@ GAME_CONFIG = load_game_config()
 # Game configuration constants
 MAX_PLAYERS = GAME_CONFIG["game_rules"]["max_players"]
 AUTO_START_THRESHOLD = GAME_CONFIG["game_rules"]["auto_start_threshold"]
+SPIDER_DICE_MIN_TURN = GAME_CONFIG["game_rules"]["spider_dice_min_turn"]
 
 # Board connectivity - defines which nodes are connected
 # This is now loaded from the shared game-config.json file
@@ -148,22 +149,28 @@ def would_move_put_matron_in_check(from_node, to_node, board_state, current_colo
     
     return False  # Move is safe
 
-def get_legal_moves_for_orc(node_id, board_state, current_color):
+def get_legal_moves_for_orc(node_id, board_state, current_color, spider_control=False):
     """Calculate legal moves for an Orc piece."""
+    print(f"DEBUG: Orc legal moves - node_id: {node_id}, spider_control: {spider_control}")
     legal_moves = set()
     neighbors = get_neighboring_nodes(node_id)
     
     for neighbor_id in neighbors:
-        # Skip if neighbor is occupied by own piece
+        # Check if this is a capture move
         if neighbor_id in board_state:
             piece_name = board_state[neighbor_id]
-            if piece_name.startswith(current_color + '_'):
-                continue
-        
-        # Check if this move would move away from enemy pieces
-        if neighbor_id in board_state:
-            # This is a capture move - always legal
-            legal_moves.add(neighbor_id)
+            print(f"DEBUG: Orc considering capture - neighbor: {neighbor_id}, piece: {piece_name}")
+            if spider_control:
+                # In spider control mode, can capture any piece
+                print(f"DEBUG: Spider control - adding capture move {neighbor_id}")
+                legal_moves.add(neighbor_id)
+            elif not piece_name.startswith(current_color + '_'):
+                # Regular mode: can only capture enemy pieces
+                print(f"DEBUG: Regular mode - adding enemy capture {neighbor_id}")
+                legal_moves.add(neighbor_id)
+            else:
+                print(f"DEBUG: Skipping friendly piece {neighbor_id}")
+            # Skip if it's own piece and not in spider control mode
         else:
             # This is a regular move - check if we're moving away from enemies
             current_has_enemies = has_enemy_neighbors(node_id, board_state, current_color)
@@ -175,9 +182,10 @@ def get_legal_moves_for_orc(node_id, board_state, current_color):
             if not current_has_enemies or new_has_enemies:
                 legal_moves.add(neighbor_id)
     
+    print(f"DEBUG: Orc final legal moves: {list(legal_moves)}")
     return list(legal_moves)
 
-def get_legal_moves_for_priestess(node_id, board_state, current_color):
+def get_legal_moves_for_priestess(node_id, board_state, current_color, spider_control=False):
     """Calculate legal moves for a Priestess piece."""
     legal_moves = set()
     
@@ -213,9 +221,9 @@ def get_legal_moves_for_priestess(node_id, board_state, current_color):
             
             # If there's a piece at this node, we can't move past it
             if target_node in board_state:
-                # Check if we can capture (enemy piece)
+                # Check if we can capture
                 piece_name = board_state[target_node]
-                if is_enemy_piece(piece_name, current_color):
+                if spider_control or is_enemy_piece(piece_name, current_color):
                     legal_moves.add(target_node)
                 # Stop checking this direction (can't move through pieces)
                 break
@@ -230,9 +238,9 @@ def get_legal_moves_for_priestess(node_id, board_state, current_color):
             
             # If there's a piece at this node, we can't move past it
             if target_node in board_state:
-                # Check if we can capture (enemy piece)
+                # Check if we can capture
                 piece_name = board_state[target_node]
-                if is_enemy_piece(piece_name, current_color):
+                if spider_control or is_enemy_piece(piece_name, current_color):
                     legal_moves.add(target_node)
                 # Stop checking this direction (can't move through pieces)
                 break
@@ -242,7 +250,7 @@ def get_legal_moves_for_priestess(node_id, board_state, current_color):
     
     return list(legal_moves)
 
-def get_legal_moves_for_matron_mother(node_id, board_state, current_color):
+def get_legal_moves_for_matron_mother(node_id, board_state, current_color, spider_control=False):
     """Calculate legal moves for a Matron Mother piece."""
     legal_moves = set()
     
@@ -250,19 +258,26 @@ def get_legal_moves_for_matron_mother(node_id, board_state, current_color):
     neighbors = get_neighboring_nodes(node_id)
     
     for neighbor_id in neighbors:
-        # Skip if neighbor is occupied by own piece
+        # Check if this is a capture move
         if neighbor_id in board_state:
             piece_name = board_state[neighbor_id]
-            if piece_name.startswith(current_color + '_'):
-                continue
-        
-        # Check if this move would put the Matron Mother in check
-        if not would_move_put_matron_in_check(node_id, neighbor_id, board_state, current_color):
-            legal_moves.add(neighbor_id)
+            if spider_control:
+                # In spider control mode, can capture any piece (but still check for safety)
+                if not would_move_put_matron_in_check(node_id, neighbor_id, board_state, current_color):
+                    legal_moves.add(neighbor_id)
+            elif not piece_name.startswith(current_color + '_'):
+                # Regular mode: can only capture enemy pieces
+                if not would_move_put_matron_in_check(node_id, neighbor_id, board_state, current_color):
+                    legal_moves.add(neighbor_id)
+            # Skip if it's own piece and not in spider control mode
+        else:
+            # Empty node - check if this move would put the Matron Mother in check
+            if not would_move_put_matron_in_check(node_id, neighbor_id, board_state, current_color):
+                legal_moves.add(neighbor_id)
     
     return list(legal_moves)
 
-def get_legal_moves_for_weaponmaster(node_id, board_state, current_color):
+def get_legal_moves_for_weaponmaster(node_id, board_state, current_color, spider_control=False):
     """Calculate legal moves for a Weaponmaster piece."""
     legal_moves = set()
     
@@ -270,11 +285,11 @@ def get_legal_moves_for_weaponmaster(node_id, board_state, current_color):
     first_neighbors = get_neighboring_nodes(node_id)
     
     for first_neighbor_id in first_neighbors:
-        # Skip if first neighbor is occupied by own piece (can't move through friendly pieces)
+        # Check if first neighbor is blocked
         if first_neighbor_id in board_state:
             piece_name = board_state[first_neighbor_id]
-            if piece_name.startswith(current_color + '_'):
-                continue
+            if not spider_control and piece_name.startswith(current_color + '_'):
+                continue  # Can't move through friendly pieces in normal mode
         
         # Get neighbors of the first neighbor for the second move
         second_neighbors = get_neighboring_nodes(first_neighbor_id)
@@ -283,11 +298,11 @@ def get_legal_moves_for_weaponmaster(node_id, board_state, current_color):
             if second_neighbor_id == node_id:
                 continue
             
-            # Skip if occupied by own piece (can't move through friendly pieces on second move)
+            # Check if second position is blocked
             if second_neighbor_id in board_state:
                 piece_name = board_state[second_neighbor_id]
-                if piece_name.startswith(current_color + '_'):
-                    continue
+                if not spider_control and piece_name.startswith(current_color + '_'):
+                    continue  # Can't end on friendly pieces in normal mode
             
             # Add the complete two-node path as a legal move
             # Format: "first_node->second_node" to represent the complete move
@@ -296,7 +311,7 @@ def get_legal_moves_for_weaponmaster(node_id, board_state, current_color):
     
     return list(legal_moves)
 
-def get_legal_moves_for_wizard(node_id, board_state, current_color):
+def get_legal_moves_for_wizard(node_id, board_state, current_color, spider_control=False):
     """Calculate legal moves for a Wizard piece."""
     legal_moves = set()
     
@@ -308,7 +323,7 @@ def get_legal_moves_for_wizard(node_id, board_state, current_color):
         if first_neighbor_id == node_id:
             continue
             
-        # Wizard can move through any pieces (friendly or enemy) - no restrictions on first move
+        # Wizard can move through any pieces (friendly or enemy) - no restrictions on intermediate moves
         
         # Get neighbors of the first neighbor for the second move
         second_neighbors = get_neighboring_nodes(first_neighbor_id)
@@ -328,7 +343,11 @@ def get_legal_moves_for_wizard(node_id, board_state, current_color):
                     third_neighbor_id == second_neighbor_id):
                     continue
                 
-                # Wizard can move through any pieces on third move too
+                # Check final destination
+                if third_neighbor_id in board_state:
+                    piece_name = board_state[third_neighbor_id]
+                    if not spider_control and piece_name.startswith(current_color + '_'):
+                        continue  # Can't end on friendly pieces in normal mode
                 
                 # Add the complete three-node path as a legal move
                 # Format: "first_node->second_node->third_node" to represent the complete move
@@ -337,24 +356,27 @@ def get_legal_moves_for_wizard(node_id, board_state, current_color):
     
     return list(legal_moves)
 
-def get_legal_moves(piece_name, node_id, board_state, current_color):
+def get_legal_moves(piece_name, node_id, board_state, current_color, spider_control=False):
     """Get legal moves for any piece type."""
     if 'orc' in piece_name:
-        return get_legal_moves_for_orc(node_id, board_state, current_color)
+        return get_legal_moves_for_orc(node_id, board_state, current_color, spider_control)
     elif 'priestess' in piece_name:
-        return get_legal_moves_for_priestess(node_id, board_state, current_color)
+        return get_legal_moves_for_priestess(node_id, board_state, current_color, spider_control)
     elif 'matron mother' in piece_name:
-        return get_legal_moves_for_matron_mother(node_id, board_state, current_color)
+        return get_legal_moves_for_matron_mother(node_id, board_state, current_color, spider_control)
     elif 'weaponmaster' in piece_name:
-        return get_legal_moves_for_weaponmaster(node_id, board_state, current_color)
+        return get_legal_moves_for_weaponmaster(node_id, board_state, current_color, spider_control)
     elif 'wizard' in piece_name:
-        return get_legal_moves_for_wizard(node_id, board_state, current_color)
+        return get_legal_moves_for_wizard(node_id, board_state, current_color, spider_control)
     else:
         # For other pieces, return all neighboring nodes (placeholder)
         neighbors = get_neighboring_nodes(node_id)
         legal_moves = []
         for neighbor_id in neighbors:
             if neighbor_id not in board_state or is_enemy_piece(board_state[neighbor_id], current_color):
+                legal_moves.append(neighbor_id)
+            elif spider_control and neighbor_id in board_state:
+                # In spider control mode, can capture any piece
                 legal_moves.append(neighbor_id)
         return legal_moves
 
@@ -496,26 +518,42 @@ class Lobby:
         piece_name = self.game_state['board'][node_id]
         current_color = piece_name.split('_')[0]
         
-        # Check if it's the current player's turn
-        if current_color != self.game_state['current_turn']:
+        # Check if this is a controlled piece
+        is_controlled = self.game_state.get('controlled_piece_node') == node_id
+        # Debug: Log controlled piece detection
+        if is_controlled:
+            print(f"🕷️ Getting legal moves for controlled piece {node_id} ({piece_name})")
+        
+        # Check if it's the current player's turn OR if this is a controlled enemy piece
+        if not is_controlled and current_color != self.game_state['current_turn']:
+            print(f"DEBUG: Rejecting - not controlled and not current player's turn")
             return []
         
-        # Get basic legal moves
-        basic_legal_moves = get_legal_moves(piece_name, node_id, self.game_state['board'], current_color)
+        # Get basic legal moves (now that we know this piece can be moved)
+        basic_legal_moves = get_legal_moves(piece_name, node_id, self.game_state['board'], current_color, spider_control=is_controlled)
+        # Debug: Log basic legal moves for controlled pieces
+        if is_controlled:
+            print(f"🕷️ Basic legal moves for controlled piece: {basic_legal_moves}")
         
-        # If the player is in check, filter moves to only include those that resolve the check
-        if self._is_player_in_check(current_color):
+        # For controlled pieces, use the controlling player's color for check logic
+        controlling_color = self.game_state['current_turn'] if is_controlled else current_color
+        
+        # If the controlling player is in check, filter moves to only include those that resolve the check
+        if self._is_player_in_check(controlling_color):
             resolving_moves = []
             for move in basic_legal_moves:
-                if self._does_move_resolve_check(node_id, move, piece_name, current_color):
+                if self._does_move_resolve_check(node_id, move, piece_name, controlling_color):
                     resolving_moves.append(move)
             return resolving_moves
         
-        # If not in check, filter out moves that would put the player in check
+        # If not in check, filter out moves that would put the controlling player in check
         safe_moves = []
         for move in basic_legal_moves:
-            if self._is_move_safe_for_matron_mother(node_id, move, piece_name, current_color):
+            if self._is_move_safe_for_matron_mother(node_id, move, piece_name, controlling_color):
                 safe_moves.append(move)
+        # Debug: Log final legal moves for controlled pieces
+        if is_controlled:
+            print(f"🕷️ Final legal moves for controlled piece: {safe_moves}")
         return safe_moves
 
     def execute_move(self, from_node, to_node, player_id):
@@ -732,10 +770,10 @@ class Lobby:
         if player['color'] != self.game_state['current_turn']:
             return False, "Not your turn"
         
-        # Check turn number requirement (must be at least turn 3)
+        # Check turn number requirement
         player_turn_count = self.game_state['player_turn_numbers'][player['color']]
-        if player_turn_count < 3:
-            return False, f"Must wait until turn 3 (current turn: {player_turn_count})"
+        if player_turn_count < SPIDER_DICE_MIN_TURN:
+            return False, f"Must wait until turn {SPIDER_DICE_MIN_TURN} (current turn: {player_turn_count})"
         
         # Roll two d8 dice (1-8)
         import random
@@ -771,6 +809,11 @@ class Lobby:
             self.game_state['sacrifice_mode'] = True
             self.game_state['sacrifice_player'] = player['color']
             print(f"🔪🔪 DOUBLE KNIVES! {player['color']} player must sacrifice a piece!")
+        elif both_spiders:
+            # Set spider control mode for the current player
+            self.game_state['spider_control_mode'] = True
+            self.game_state['spider_control_player'] = player['color']
+            print(f"🕷️🕷️ DOUBLE SPIDERS! {player['color']} player can control an enemy piece!")
         else:
             # Switch turns for normal results
             self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
@@ -797,9 +840,21 @@ class Lobby:
         if not player:
             return False, "Player not found"
         
-        # Check if it's the current player's turn OR if they're in sacrifice mode
-        if player['color'] != self.game_state['current_turn'] and not self.game_state.get('sacrifice_mode', False):
-            return False, "Not your turn"
+        # Check if player has permission to sacrifice
+        sacrifice_mode = self.game_state.get('sacrifice_mode', False)
+        sacrifice_player = self.game_state.get('sacrifice_player')
+        current_turn = self.game_state['current_turn']
+        
+        print(f"🔪 SACRIFICE DEBUG: player={player['color']}, current_turn={current_turn}, sacrifice_mode={sacrifice_mode}, sacrifice_player={sacrifice_player}")
+        
+        if sacrifice_mode:
+            # In sacrifice mode, only the designated sacrifice player can sacrifice
+            if player['color'] != sacrifice_player:
+                return False, "Only the player who rolled double knives can sacrifice"
+        else:
+            # Normal mode, check if it's the player's turn
+            if player['color'] != current_turn:
+                return False, "Not your turn"
         
         # Check if there's a piece at the specified node
         if node_id not in self.game_state['board']:
@@ -835,6 +890,157 @@ class Lobby:
 
         # Notify all players about the sacrifice
         notify_lobby_update(self.lobby_id, 'piece_sacrificed', self.game_state)
+        
+        return True, self.game_state
+    
+    def control_enemy_piece(self, node_id, player_id):
+        """Take control of an enemy piece for one turn."""
+        # Verify the game has started
+        if not self.game_state['game_started']:
+            return False, "Game not started"
+        
+        # Find the player
+        player = next((p for p in self.players if p['id'] == player_id), None)
+        if not player:
+            return False, "Player not found"
+        
+        # Check if player is in spider control mode
+        if not self.game_state.get('spider_control_mode', False):
+            return False, "Not in spider control mode"
+        
+        if self.game_state.get('spider_control_player') != player['color']:
+            return False, "Not your spider control turn"
+        
+        # Check if there's a piece at the specified node
+        if node_id not in self.game_state['board']:
+            return False, "No piece at specified node"
+        
+        # Check if the piece is an enemy piece
+        piece_name = self.game_state['board'][node_id]
+        enemy_color = 'blue' if player['color'] == 'red' else 'red'
+        if not piece_name.startswith(enemy_color + '_'):
+            return False, "Can only control enemy pieces"
+        
+        # Check if the piece is a matron mother (cannot be controlled)
+        if 'matron mother' in piece_name:
+            return False, "Cannot control the matron mother"
+        
+        # Set the controlled piece
+        self.game_state['controlled_piece_node'] = node_id
+        self.game_state['controlled_piece_name'] = piece_name
+        self.game_state['controlled_piece_original_color'] = enemy_color
+        
+        # Create move record
+        self.game_state['last_move'] = {
+            'move_type': 'enemy_piece_controlled',
+            'player': player['color'],
+            'controlled_piece': piece_name,
+            'controlled_node': node_id
+        }
+        
+        print(f"🕷️ {player['color']} player takes control of {piece_name} at {node_id}")
+        
+        # Notify all players about the control
+        notify_lobby_update(self.lobby_id, 'enemy_piece_controlled', self.game_state)
+        
+        return True, self.game_state
+    
+    def execute_controlled_move(self, from_node, to_node, player_id):
+        """Execute a move with a controlled enemy piece."""
+        # Verify the game has started
+        if not self.game_state['game_started']:
+            return False, "Game not started"
+        
+        # Find the player
+        player = next((p for p in self.players if p['id'] == player_id), None)
+        if not player:
+            return False, "Player not found"
+        
+        # Check if player has a controlled piece
+        if not self.game_state.get('controlled_piece_node'):
+            return False, "No piece under control"
+        
+        if self.game_state.get('spider_control_player') != player['color']:
+            return False, "Not your controlled piece"
+        
+        # Verify the from_node matches the controlled piece
+        if from_node != self.game_state['controlled_piece_node']:
+            return False, "Can only move the controlled piece"
+        
+        # Get the controlled piece info
+        piece_name = self.game_state['controlled_piece_name']
+        original_color = self.game_state['controlled_piece_original_color']
+        
+        # For controlled pieces, get legal moves with spider control enabled
+        basic_legal_moves = get_legal_moves(piece_name, from_node, self.game_state['board'], original_color, spider_control=True)
+        
+        # Check if the move is in the basic legal moves
+        if to_node not in basic_legal_moves:
+            return False, "Invalid move for this piece type"
+        
+        # Use the existing execute_move logic but with spider control mode
+        # Temporarily update the piece name to match the controlling player's color for execution
+        temp_piece_name = f"{player['color']}_{piece_name.split('_', 1)[1]}"
+        original_piece_name = self.game_state['board'][from_node]
+        print(f"DEBUG: Controlled move - original_piece_name: {original_piece_name}, temp_piece_name: {temp_piece_name}")
+        self.game_state['board'][from_node] = temp_piece_name
+        
+        # Execute the move using existing logic
+        success, result = self.execute_move(from_node, to_node, player_id)
+        
+        if not success:
+            # Restore original piece name if move failed
+            self.game_state['board'][from_node] = original_piece_name
+            return False, result
+        
+        # Restore the original piece color after the move
+        if '->' in to_node:
+            # Handle complex moves (weaponmaster/wizard)
+            if 'weaponmaster' in piece_name:
+                nodes = to_node.split('->')
+                final_position = nodes[1] if len(nodes) == 2 else to_node
+            elif 'wizard' in piece_name:
+                nodes = to_node.split('->')
+                final_position = nodes[2] if len(nodes) == 3 else to_node
+            else:
+                final_position = to_node
+        else:
+            final_position = to_node
+        
+        # Restore original piece name at final position
+        print(f"DEBUG: Restoring piece {piece_name} at final position {final_position}")
+        self.game_state['board'][final_position] = piece_name
+        captured_pieces = result['last_move'].get('captured', [])
+        
+        # Update game state
+        self.game_state['last_move'] = {
+            'from': from_node,
+            'to': final_position,
+            'piece': piece_name,
+            'captured': captured_pieces,
+            'player': player['color'],
+            'move_type': 'controlled_piece_move',
+            'original_piece_color': original_color
+        }
+        
+        # Clear spider control mode and controlled piece
+        self.game_state['spider_control_mode'] = False
+        self.game_state['spider_control_player'] = None
+        self.game_state['controlled_piece_node'] = None
+        self.game_state['controlled_piece_name'] = None
+        self.game_state['controlled_piece_original_color'] = None
+        
+        # Increment the current player's turn counter
+        self.game_state['player_turn_numbers'][player['color']] += 1
+        
+        # Switch turns after controlled move
+        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        
+        print(f"🕷️ Controlled move completed: {from_node} -> {final_position}")
+        print(f"Captured pieces: {captured_pieces}")
+        
+        # Notify all players about the move
+        notify_lobby_update(self.lobby_id, 'controlled_piece_moved', self.game_state)
         
         return True, self.game_state
     
@@ -1139,6 +1345,53 @@ def handle_sacrifice_piece(data):
     else:
         emit('sacrifice_error', {'error': 'Lobby not found'})
 
+@socketio.on('control_enemy_piece')
+def handle_control_enemy_piece(data):
+    lobby_id = data.get('lobby_id')
+    node_id = data.get('node_id')
+    player_id = data.get('player_id')
+    
+    print(f'WebSocket: Player {player_id} controlling enemy piece at node {node_id} in lobby {lobby_id}')
+    
+    if lobby_id in lobbies:
+        lobby = lobbies[lobby_id]
+        
+        # Control the enemy piece
+        success, result = lobby.control_enemy_piece(node_id, player_id)
+        
+        if success:
+            # Notify all players about the control
+            notify_lobby_update(lobby_id, 'enemy_piece_controlled', result)
+        else:
+            # Send error back to the player
+            emit('spider_control_error', {'error': result})
+    else:
+        emit('spider_control_error', {'error': 'Lobby not found'})
+
+@socketio.on('move_controlled_piece')
+def handle_move_controlled_piece(data):
+    lobby_id = data.get('lobby_id')
+    from_node = data.get('from_node')
+    to_node = data.get('to_node')
+    player_id = data.get('player_id')
+    
+    print(f'WebSocket: Player {player_id} moving controlled piece from {from_node} to {to_node} in lobby {lobby_id}')
+    
+    if lobby_id in lobbies:
+        lobby = lobbies[lobby_id]
+        
+        # Execute the controlled move
+        success, result = lobby.execute_controlled_move(from_node, to_node, player_id)
+        
+        if success:
+            # Notify all players about the controlled move
+            notify_lobby_update(lobby_id, 'controlled_piece_moved', result)
+        else:
+            # Send error back to the player
+            emit('controlled_move_error', {'error': result})
+    else:
+        emit('controlled_move_error', {'error': 'Lobby not found'})
+
 @app.route('/')
 def landing():
     return render_template('landing.html')
@@ -1260,7 +1513,8 @@ def move_piece_api(lobby_id):
     if success:
         return jsonify({
             'success': True,
-            'game_state': result
+            'game_state': result,
+            'lobby_info': lobby.get_lobby_info()
         })
     else:
         return jsonify({'error': result}), 400
@@ -1289,7 +1543,8 @@ def roll_spider_dice_api(lobby_id):
     if success:
         return jsonify({
             'success': True,
-            'game_state': result
+            'game_state': result,
+            'lobby_info': lobby.get_lobby_info()
         })
     else:
         return jsonify({'error': result}), 400

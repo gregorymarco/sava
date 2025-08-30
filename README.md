@@ -27,7 +27,6 @@ http://localhost:5000
 ## TODOs
 
 Most important:
-- Add spider dice!
 - UI facelift with appropriate assets
 - Turn timers/chess clock
 - Chat window
