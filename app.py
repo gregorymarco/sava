@@ -412,7 +412,8 @@ class Lobby:
         'player_turn_numbers': {
             'red': 0,  # Red player's turn counter
             'blue': 0   # Blue player's turn counter
-        }
+        },
+        'chat_messages': []  # Chat messages for this lobby
         }
 
     def add_player(self, player_id, player_name):
@@ -1044,6 +1045,34 @@ class Lobby:
         
         return True, self.game_state
     
+    def add_chat_message(self, player_id, message):
+        """Add a chat message to the lobby."""
+        # Find the player
+        player = next((p for p in self.players if p['id'] == player_id), None)
+        if not player:
+            # Check spectators
+            player = next((s for s in self.spectators if s['id'] == player_id), None)
+            if not player:
+                return False, "Player not found"
+        
+        # Create message object
+        chat_message = {
+            'id': len(self.game_state['chat_messages']) + 1,
+            'player_id': player_id,
+            'player_name': player['name'],
+            'player_color': player.get('color', 'spectator'),
+            'message': message,
+            'timestamp': datetime.now().isoformat(),
+            'is_spectator': player_id in [s['id'] for s in self.spectators]
+        }
+        
+        # Add to chat messages (keep last 50 messages)
+        self.game_state['chat_messages'].append(chat_message)
+        if len(self.game_state['chat_messages']) > 50:
+            self.game_state['chat_messages'] = self.game_state['chat_messages'][-50:]
+        
+        return True, chat_message
+    
     def _is_move_safe_for_matron_mother(self, from_node, to_node, piece_name, player_color):
         """Check if a move would put the player's own Matron Mother in check."""
         # Create a temporary board state to simulate the move
@@ -1392,6 +1421,29 @@ def handle_move_controlled_piece(data):
     else:
         emit('controlled_move_error', {'error': 'Lobby not found'})
 
+@socketio.on('send_chat_message')
+def handle_send_chat_message(data):
+    lobby_id = data.get('lobby_id')
+    message = data.get('message')
+    player_id = data.get('player_id')
+    
+    print(f'WebSocket: Player {player_id} sending chat message in lobby {lobby_id}: {message}')
+    
+    if lobby_id in lobbies:
+        lobby = lobbies[lobby_id]
+        
+        # Add the chat message
+        success, result = lobby.add_chat_message(player_id, message)
+        
+        if success:
+            # Notify all players about the new message
+            notify_lobby_update(lobby_id, 'chat_message_sent', result)
+        else:
+            # Send error back to the player
+            emit('chat_error', {'error': result})
+    else:
+        emit('chat_error', {'error': 'Lobby not found'})
+
 @app.route('/')
 def landing():
     return render_template('landing.html')
@@ -1697,6 +1749,41 @@ def get_all_lobbies():
         'lobbies': lobby_list,
         'total_count': len(lobby_list)
     })
+
+@app.route('/api/lobby/<lobby_id>/chat', methods=['POST'])
+def send_chat_message_api(lobby_id):
+    """Send a chat message to the lobby."""
+    if lobby_id not in lobbies:
+        return jsonify({'error': 'Lobby not found'}), 404
+    
+    data = request.get_json()
+    message = data.get('message')
+    player_id = data.get('player_id')
+    
+    if not message or not player_id:
+        return jsonify({'error': 'Message and Player ID required'}), 400
+    
+    if len(message.strip()) == 0:
+        return jsonify({'error': 'Message cannot be empty'}), 400
+    
+    if len(message) > 500:
+        return jsonify({'error': 'Message too long (max 500 characters)'}), 400
+    
+    lobby = lobbies[lobby_id]
+    
+    # Add the chat message
+    success, result = lobby.add_chat_message(player_id, message.strip())
+    
+    if success:
+        # Notify all players about the new message via WebSocket
+        notify_lobby_update(lobby_id, 'chat_message_sent', result)
+        
+        return jsonify({
+            'success': True,
+            'message': result
+        })
+    else:
+        return jsonify({'error': result}), 400
 
 if __name__ == '__main__':
     socketio.run(app, debug=True, host='0.0.0.0', port=5000) 

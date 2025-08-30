@@ -29,7 +29,6 @@ http://localhost:5000
 Most important:
 - UI facelift with appropriate assets
 - Turn timers/chess clock
-- Chat window
 
 Next steps:
 - Matchmaking
@@ -43,3 +42,7 @@ Next steps:
 - **Frontend**: HTML5, CSS3, JavaScript
 - **Dynamic Updates**: HTMX
 - **Styling**: Custom CSS
+
+## AI use disclosure
+
+Much of this codebase was written by AI using claude-4-sonnet! 

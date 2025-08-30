@@ -8,7 +8,293 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="/static/js/game-config.js"></script>
-    <link rel="stylesheet" href="/static/css/lobby.css"
+    <link rel="stylesheet" href="/static/css/lobby.css">
+    <style>
+        /* Chat Window Styles */
+        .chat-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1002;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        .chat-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .chat-toggle.active {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .chat-icon {
+            font-size: 1.5rem;
+        }
+
+        .chat-window {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            width: 350px;
+            height: 500px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            z-index: 1001;
+            display: none;
+            flex-direction: column;
+            border: 1px solid #e0e0e0;
+        }
+
+        .chat-window.open {
+            display: flex;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .close-chat-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .close-chat-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            max-height: 380px;
+        }
+
+        .chat-welcome {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 1rem;
+            border: 2px dashed #e0e0e0;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+
+        .chat-message {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .chat-message.own {
+            align-items: flex-end;
+        }
+
+        .chat-message.other {
+            align-items: flex-start;
+        }
+
+        .chat-message.spectator {
+            align-items: flex-start;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .message-header .player-name {
+            font-weight: bold;
+        }
+
+        .message-header .player-name.red {
+            color: #c62828;
+        }
+
+        .message-header .player-name.blue {
+            color: #1565c0;
+        }
+
+        .message-header .player-name.spectator {
+            color: #757575;
+        }
+
+        .message-timestamp {
+            font-size: 0.7rem;
+            color: #999;
+        }
+
+        .message-content {
+            background: #f0f0f0;
+            padding: 0.75rem 1rem;
+            border-radius: 18px;
+            max-width: 250px;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+
+        .chat-message.own .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .chat-message.spectator .message-content {
+            background: #e8e8e8;
+            border-left: 3px solid #757575;
+        }
+
+        .chat-input-container {
+            padding: 1rem;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .chat-input-container input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            outline: none;
+            font-size: 0.9rem;
+        }
+
+        .chat-input-container input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+
+        .send-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .send-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Mobile responsive design */
+        @media (max-width: 768px) {
+            .chat-window {
+                top: 0;
+                right: 0;
+                left: 0;
+                bottom: 0;
+                width: 100%;
+                height: 100%;
+                border-radius: 0;
+            }
+
+            .chat-header {
+                border-radius: 0;
+            }
+
+            .chat-toggle {
+                top: 15px;
+                right: 15px;
+                width: 45px;
+                height: 45px;
+            }
+
+            .chat-messages {
+                max-height: none;
+                flex: 1;
+            }
+
+            .message-content {
+                max-width: 80%;
+            }
+        }
+
+        /* Animation for new messages */
+        @keyframes messageSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .chat-message.new {
+            animation: messageSlideIn 0.3s ease-out;
+        }
+
+        /* Scrollbar styling for chat messages */
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 3px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #999;
+        }
+    </style>
 </head>
 <body>
     <!-- Hamburger menu button -->
@@ -18,8 +304,15 @@
         <div class="bar"></div>
     </button>
     
+    <!-- Chat toggle button -->
+    <button class="chat-toggle" id="chat-toggle" onclick="toggleChat()">
+        <div class="chat-icon">💬</div>
+    </button>
+    
     <!-- Mobile overlay -->
     <div class="mobile-overlay" id="mobile-overlay" onclick="closeSidebar()"></div>
+    
+
     
     <div class="container">
         <div class="lobby-content">
@@ -102,6 +395,23 @@
                         🔄 Refresh Board
                     </button>
                 </div>
+            </div>
+        </div>
+        
+        <!-- Chat Window -->
+        <div class="chat-window" id="chat-window">
+            <div class="chat-header">
+                <div class="chat-title">💬 Chat</div>
+                <button class="close-chat-btn" onclick="closeChat()">×</button>
+            </div>
+            
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-welcome">Welcome to the lobby! Start chatting with other players.</div>
+            </div>
+            
+            <div class="chat-input-container">
+                <input type="text" id="chat-input" placeholder="Type a message..." maxlength="500" onkeypress="handleChatKeyPress(event)">
+                <button class="send-btn" onclick="sendChatMessage()">Send</button>
             </div>
         </div>
     </div>
@@ -239,6 +549,12 @@
             socket.on('controlled_move_error', function(data) {
                 console.error('Controlled move error:', data.error);
                 document.getElementById('status-text').textContent = 'Controlled move failed: ' + data.error;
+            });
+            
+            // Listen for chat errors
+            socket.on('chat_error', function(data) {
+                console.error('Chat error:', data.error);
+                // You could show an error message in the chat window here
             });
         }
 
@@ -502,6 +818,14 @@
                             console.error('Failed to initialize game board from WebSocket:', error);
                         });
                     }
+                    
+                    // Load existing chat messages
+                    loadChatMessages();
+                    break;
+                    
+                case 'chat_message_sent':
+                    console.log('Chat message received via WebSocket:', eventData);
+                    addChatMessage(eventData);
                     break;
                     
                 default:
@@ -594,6 +918,168 @@
             if (lobbyState.game_state && lobbyState.game_state.game_started) {
                 updateSpiderDiceButtonState();
             }
+        }
+
+        // Chat functionality
+        function toggleChat() {
+            const chatWindow = document.getElementById('chat-window');
+            const chatToggle = document.getElementById('chat-toggle');
+            
+            if (chatWindow.classList.contains('open')) {
+                closeChat();
+            } else {
+                openChat();
+            }
+        }
+
+        function openChat() {
+            const chatWindow = document.getElementById('chat-window');
+            const chatToggle = document.getElementById('chat-toggle');
+            
+            chatWindow.classList.add('open');
+            chatToggle.classList.add('active');
+            
+            // Focus on chat input
+            setTimeout(() => {
+                document.getElementById('chat-input').focus();
+            }, 50);
+        }
+
+        function closeChat() {
+            const chatWindow = document.getElementById('chat-window');
+            const chatToggle = document.getElementById('chat-toggle');
+            
+            chatWindow.classList.remove('open');
+            chatToggle.classList.remove('active');
+        }
+
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendChatMessage();
+            }
+        }
+
+        async function sendChatMessage() {
+            const chatInput = document.getElementById('chat-input');
+            const message = chatInput.value.trim();
+            
+            if (!message) return;
+            
+            if (message.length > 500) {
+                alert('Message too long (max 500 characters)');
+                return;
+            }
+            
+            const sendBtn = document.querySelector('.send-btn');
+            sendBtn.disabled = true;
+            sendBtn.textContent = 'Sending...';
+            
+            try {
+                const lobbyId = document.getElementById('lobby-id').textContent;
+                
+                // Send via WebSocket
+                socket.emit('send_chat_message', {
+                    lobby_id: lobbyId,
+                    message: message,
+                    player_id: playerId
+                });
+                
+                // Clear input
+                chatInput.value = '';
+                
+            } catch (error) {
+                console.error('Failed to send chat message:', error);
+                alert('Failed to send message. Please try again.');
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Send';
+            }
+        }
+
+        function loadChatMessages() {
+            if (!lobbyState || !lobbyState.game_state || !lobbyState.game_state.chat_messages) {
+                return;
+            }
+            
+            const chatMessages = document.getElementById('chat-messages');
+            // Clear welcome message if it exists
+            const welcomeMessage = chatMessages.querySelector('.chat-welcome');
+            if (welcomeMessage) {
+                welcomeMessage.remove();
+            }
+            
+            // Load all existing messages
+            lobbyState.game_state.chat_messages.forEach(message => {
+                addChatMessage(message, false); // false = don't animate
+            });
+        }
+
+        function addChatMessage(messageData, animate = true) {
+            const chatMessages = document.getElementById('chat-messages');
+            
+            // Remove welcome message if it exists
+            const welcomeMessage = chatMessages.querySelector('.chat-welcome');
+            if (welcomeMessage) {
+                welcomeMessage.remove();
+            }
+            
+            const messageElement = document.createElement('div');
+            messageElement.className = 'chat-message';
+            
+            // Determine if this is our own message
+            const isOwnMessage = messageData.player_id === playerId;
+            const isSpectator = messageData.is_spectator;
+            
+            if (isOwnMessage) {
+                messageElement.classList.add('own');
+            } else if (isSpectator) {
+                messageElement.classList.add('spectator');
+            } else {
+                messageElement.classList.add('other');
+            }
+            
+            if (animate) {
+                messageElement.classList.add('new');
+            }
+            
+            // Format timestamp
+            const timestamp = new Date(messageData.timestamp);
+            const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            // Determine player color class
+            let playerColorClass = '';
+            if (isSpectator) {
+                playerColorClass = 'spectator';
+            } else {
+                playerColorClass = messageData.player_color || 'spectator';
+            }
+            
+            messageElement.innerHTML = `
+                <div class="message-header">
+                    <span class="player-name ${playerColorClass}">${messageData.player_name}</span>
+                    ${isSpectator ? '<span class="spectator-badge">(Spectator)</span>' : ''}
+                    <span class="message-timestamp">${timeString}</span>
+                </div>
+                <div class="message-content">${escapeHtml(messageData.message)}</div>
+            `;
+            
+            chatMessages.appendChild(messageElement);
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            // Remove new animation class after animation completes
+            if (animate) {
+                setTimeout(() => {
+                    messageElement.classList.remove('new');
+                }, 300);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // Update captured pieces display
