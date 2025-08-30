@@ -22,7 +22,7 @@ http://localhost:5000
 ## Current Status
 
 - ~~🔄 In dev~~
-- 🎉 Prototype! A fully legal game can be played over the board.
+- 🎉 Prototype! A fully legal game technically can be played over the board, with a few small bugs. Testing is underway...
 
 ## TODOs
 
@@ -32,7 +32,7 @@ Most important:
 - Chat window
 
 Next steps:
-- Matchmaking/lobby placement 
+- Matchmaking
 - Stored game/account state 
     - Match history
     - Elo

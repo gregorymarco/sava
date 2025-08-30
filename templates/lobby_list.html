@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sava - Active Lobbies</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/lobby.css') }}">
+    <style>
+        .lobby-list-banner {
+            background: linear-gradient(135deg, #4a5bb8 0%, #5a3d7a 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(74, 91, 184, 0.3);
+            width: 100%;
+        }
+
+        .lobby-list-banner-content {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        .lobby-list-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        .lobby-list-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .lobby-list-header h1 {
+            color: white;
+            margin-bottom: 0.5rem;
+            font-size: 2.5rem;
+            font-weight: 300;
+        }
+
+        .lobby-list-header p {
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 0;
+            font-size: 1.1rem;
+        }
+
+        .lobby-stats {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 2rem;
+            border: 1px solid #e9ecef;
+        }
+
+        .lobby-grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+        }
+
+        .lobby-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            transition: box-shadow 0.2s ease;
+        }
+
+        .lobby-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .lobby-card.game-active {
+            border-left: 4px solid #28a745;
+        }
+
+        .lobby-card.game-waiting {
+            border-left: 4px solid #ffc107;
+        }
+
+        .lobby-card.game-full {
+            border-left: 4px solid #6c757d;
+        }
+
+        .lobby-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .lobby-id {
+            font-family: 'Courier New', monospace;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .lobby-status {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-waiting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-full {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-finished {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
+        .lobby-info {
+            margin-bottom: 1rem;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .info-label {
+            color: #666;
+        }
+
+        .info-value {
+            color: #333;
+            font-weight: bold;
+        }
+
+        .players-list {
+            margin: 0.5rem 0;
+        }
+
+        .player-chip {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            margin: 0.2rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .player-red {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .player-blue {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .lobby-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            text-decoration: none;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            flex: 1;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .btn:disabled {
+            background: #e9ecef;
+            color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #666;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .empty-state p {
+            margin-bottom: 2rem;
+        }
+
+        .refresh-button {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .refresh-button:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .banner-navigation {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .banner-navigation a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+
+        .banner-navigation a:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .lobby-list-container {
+                padding: 0 0.5rem;
+            }
+
+            .lobby-list-banner {
+                padding: 1.5rem 0;
+                margin-bottom: 1.5rem;
+            }
+
+            .lobby-list-banner-content {
+                padding: 0 1rem;
+            }
+
+            .lobby-list-header h1 {
+                font-size: 2rem;
+            }
+
+            .banner-navigation {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .banner-navigation a,
+            .refresh-button {
+                width: 100%;
+                text-align: center;
+            }
+
+            .lobby-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .lobby-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .info-row {
+                flex-direction: column;
+                gap: 0.2rem;
+            }
+
+            .lobby-actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="lobby-list-banner">
+        <div class="lobby-list-banner-content">
+            <div class="lobby-list-header">
+                <h1>🎯 Active Game Lobbies</h1>
+                <p>Join an existing game or create a new one</p>
+            </div>
+            
+            <div class="banner-navigation">
+                <a href="/">← Back to Home</a>
+                <a href="/create-lobby">Create New Lobby</a>
+                <button class="refresh-button" onclick="loadLobbies()">🔄 Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="lobby-list-container">
+
+        <div id="lobby-stats" class="lobby-stats" style="display: none;">
+            <strong id="total-lobbies">0</strong> active lobbies
+        </div>
+
+        <div id="error-message" class="error" style="display: none;"></div>
+        
+        <div id="loading" class="loading">
+            <p>Loading lobbies...</p>
+        </div>
+
+        <div id="lobby-grid" class="lobby-grid" style="display: none;"></div>
+
+        <div id="empty-state" class="empty-state" style="display: none;">
+            <h3>No Active Lobbies</h3>
+            <p>Be the first to start a game!</p>
+            <a href="/create-lobby" class="btn btn-primary">Create New Lobby</a>
+        </div>
+    </div>
+
+    <script>
+        let refreshInterval;
+
+        function formatTimeAgo(isoString) {
+            const date = new Date(isoString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / (1000 * 60));
+            const diffHours = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHours / 24);
+
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            return `${diffDays}d ago`;
+        }
+
+        function getLobbyStatus(lobby) {
+            if (lobby.game_over) return { status: 'finished', label: 'Finished' };
+            if (lobby.game_started) return { status: 'active', label: 'In Progress' };
+            if (lobby.player_count >= lobby.max_players) return { status: 'full', label: 'Full' };
+            return { status: 'waiting', label: 'Waiting for Players' };
+        }
+
+        function createLobbyCard(lobby) {
+            const status = getLobbyStatus(lobby);
+            const timeAgo = formatTimeAgo(lobby.created_at);
+            
+            const playersHtml = lobby.players.map(player => 
+                `<span class="player-chip player-${player.color}">${player.name}</span>`
+            ).join('');
+
+            const canJoin = lobby.can_join && !lobby.game_over;
+            const joinButton = canJoin 
+                ? `<a href="/lobby/${lobby.lobby_id}" class="btn btn-primary">Join Game</a>`
+                : `<button class="btn btn-secondary" disabled>
+                    ${lobby.game_over ? 'Game Finished' : 'Game Full'}
+                   </button>`;
+
+            const spectateButton = lobby.game_started && !lobby.game_over
+                ? `<a href="/lobby/${lobby.lobby_id}" class="btn btn-secondary">Spectate</a>`
+                : '';
+
+            return `
+                <div class="lobby-card game-${status.status}">
+                    <div class="lobby-header">
+                        <div class="lobby-id">Lobby ${lobby.lobby_id}</div>
+                        <div class="lobby-status status-${status.status}">${status.label}</div>
+                    </div>
+                    
+                    <div class="lobby-info">
+                        <div class="info-row">
+                            <span class="info-label">Players:</span>
+                            <span class="info-value">${lobby.player_count}/${lobby.max_players}</span>
+                        </div>
+                        
+                        ${lobby.spectator_count > 0 ? `
+                        <div class="info-row">
+                            <span class="info-label">Spectators:</span>
+                            <span class="info-value">${lobby.spectator_count}</span>
+                        </div>
+                        ` : ''}
+                        
+                        ${lobby.game_started && lobby.current_turn ? `
+                        <div class="info-row">
+                            <span class="info-label">Current Turn:</span>
+                            <span class="info-value">${lobby.current_turn.charAt(0).toUpperCase() + lobby.current_turn.slice(1)}</span>
+                        </div>
+                        ` : ''}
+                        
+                        <div class="info-row">
+                            <span class="info-label">Created:</span>
+                            <span class="info-value">${timeAgo}</span>
+                        </div>
+                        
+                        ${lobby.players.length > 0 ? `
+                        <div class="players-list">
+                            ${playersHtml}
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="lobby-actions">
+                        ${joinButton}
+                        ${spectateButton}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderLobbies(data) {
+            const lobbyGrid = document.getElementById('lobby-grid');
+            const lobbyStats = document.getElementById('lobby-stats');
+            const emptyState = document.getElementById('empty-state');
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('error-message');
+
+            // Hide loading and error
+            loading.style.display = 'none';
+            errorMessage.style.display = 'none';
+
+            if (data.lobbies.length === 0) {
+                lobbyGrid.style.display = 'none';
+                lobbyStats.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            // Show stats
+            document.getElementById('total-lobbies').textContent = data.total_count;
+            lobbyStats.style.display = 'block';
+            emptyState.style.display = 'none';
+
+            // Render lobby cards
+            lobbyGrid.innerHTML = data.lobbies.map(createLobbyCard).join('');
+            lobbyGrid.style.display = 'grid';
+        }
+
+        function showError(message) {
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('error-message');
+            
+            loading.style.display = 'none';
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        async function loadLobbies() {
+            try {
+                const response = await fetch('/api/lobbies');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                renderLobbies(data);
+                
+            } catch (error) {
+                console.error('Error loading lobbies:', error);
+                showError(`Failed to load lobbies: ${error.message}`);
+            }
+        }
+
+        function startAutoRefresh() {
+            // Refresh every 10 seconds
+            refreshInterval = setInterval(loadLobbies, 10000);
+        }
+
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadLobbies();
+            startAutoRefresh();
+        });
+
+        // Stop auto-refresh when page is hidden
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else {
+                startAutoRefresh();
+            }
+        });
+    </script>
+</body>
+</html>

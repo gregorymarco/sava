@@ -1400,6 +1400,10 @@ def landing():
 def rules():
     return render_template('rules.html')
 
+@app.route('/lobbies')
+def lobby_list():
+    return render_template('lobby_list.html')
+
 @app.route('/game')
 def game():
     return redirect(url_for('create_lobby'))
@@ -1665,6 +1669,34 @@ def get_game_config():
         'board_connections': BOARD_CONNECTIONS
     }
     return jsonify(config)
+
+@app.route('/api/lobbies')
+def get_all_lobbies():
+    """Return list of all active lobbies."""
+    lobby_list = []
+    
+    for lobby_id, lobby in lobbies.items():
+        lobby_info = {
+            'lobby_id': lobby_id,
+            'player_count': len(lobby.players),
+            'spectator_count': len(lobby.spectators),
+            'max_players': MAX_PLAYERS,
+            'can_join': len(lobby.players) < MAX_PLAYERS,
+            'game_started': lobby.game_state.get('game_started', False),
+            'game_over': lobby.game_state.get('game_over', False),
+            'current_turn': lobby.game_state.get('current_turn'),
+            'created_at': lobby.created_at.isoformat(),
+            'players': [{'name': p['name'], 'color': p['color']} for p in lobby.players]
+        }
+        lobby_list.append(lobby_info)
+    
+    # Sort by creation time (newest first)
+    lobby_list.sort(key=lambda x: x['created_at'], reverse=True)
+    
+    return jsonify({
+        'lobbies': lobby_list,
+        'total_count': len(lobby_list)
+    })
 
 if __name__ == '__main__':
     socketio.run(app, debug=True, host='0.0.0.0', port=5000) 
