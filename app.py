@@ -7,9 +7,35 @@ from datetime import datetime
 import os
 
 app = Flask(__name__)
+
+# Production configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+# CORS configuration - more restrictive for production
+allowed_origins = os.environ.get('ALLOWED_ORIGINS', '*').split(',')
+CORS(app, origins=allowed_origins)
+
+# SocketIO configuration for production
+# Check if we can use eventlet, otherwise fall back to threading
+try:
+    import eventlet
+    async_mode = 'eventlet'
+except ImportError:
+    async_mode = 'threading'
+
+socketio_kwargs = {
+    'cors_allowed_origins': allowed_origins,
+    'async_mode': async_mode,
+    'logger': False,
+    'engineio_logger': False
+}
+
+# Enable logging in development
+if os.environ.get('FLASK_ENV') == 'development':
+    socketio_kwargs['logger'] = True
+    socketio_kwargs['engineio_logger'] = True
+
+socketio = SocketIO(app, **socketio_kwargs)
 
 # In-memory storage for lobbies and game states
 lobbies = {}
@@ -2012,4 +2038,9 @@ def promote_orc_api(lobby_id):
         return jsonify({'error': result}), 400
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000) 
+    # Development server - use gunicorn for production
+    debug_mode = os.environ.get('FLASK_ENV') == 'development'
+    port = int(os.environ.get('PORT', 5000))
+    host = os.environ.get('HOST', '0.0.0.0')
+    
+    socketio.run(app, debug=debug_mode, host=host, port=port) 
