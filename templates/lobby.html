@@ -1926,8 +1926,10 @@
                             this.weaponmasterMode = false;
                             this.firstNode = null;
                             this.weaponmasterMoves = [];
-                            document.getElementById('weaponmaster-controls').style.display = 'none';
                         }
+                        
+                        // Always hide weaponmaster controls after any successful move
+                        document.getElementById('weaponmaster-controls').style.display = 'none';
                         
                         // Reset wizard state if this was a wizard move
                         if (this.wizardMode) {
