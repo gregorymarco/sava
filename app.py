@@ -16,12 +16,8 @@ allowed_origins = os.environ.get('ALLOWED_ORIGINS', '*').split(',')
 CORS(app, origins=allowed_origins)
 
 # SocketIO configuration for production
-# Check if we can use gevent, otherwise fall back to threading
-try:
-    import gevent
-    async_mode = 'gevent'
-except ImportError:
-    async_mode = 'threading'
+# Use threading mode for maximum compatibility across platforms
+async_mode = 'threading'
 
 socketio_kwargs = {
     'cors_allowed_origins': allowed_origins,

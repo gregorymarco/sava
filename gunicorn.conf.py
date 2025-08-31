@@ -11,10 +11,10 @@ backlog = 2048
 
 # Worker processes
 workers = int(os.environ.get('GUNICORN_WORKERS', multiprocessing.cpu_count() * 2 + 1))
-worker_class = "gevent"
-worker_connections = 1000
+worker_class = "sync"
 timeout = 30
 keepalive = 2
+threads = 2
 
 # Restart workers after this many requests, to help with memory leaks
 max_requests = 1000

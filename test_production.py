@@ -49,7 +49,8 @@ def test_app_startup():
             '--bind', '127.0.0.1:5001',
             '--workers', '1',
             '--timeout', '30',
-            '--worker-class', 'gevent',
+            '--worker-class', 'sync',
+            '--threads', '2',
             '--access-logfile', '-',
             '--error-logfile', '-',
             'wsgi:application'
