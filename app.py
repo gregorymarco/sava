@@ -7,7 +7,7 @@ from datetime import datetime
 import os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -40,6 +40,7 @@ GAME_CONFIG = load_game_config()
 MAX_PLAYERS = GAME_CONFIG["game_rules"]["max_players"]
 AUTO_START_THRESHOLD = GAME_CONFIG["game_rules"]["auto_start_threshold"]
 SPIDER_DICE_MIN_TURN = GAME_CONFIG["game_rules"]["spider_dice_min_turn"]
+RESURRECTION_ZONES = GAME_CONFIG["resurrection_zones"]
 
 # Board connectivity - defines which nodes are connected
 # This is now loaded from the shared game-config.json file
@@ -380,6 +381,23 @@ def get_legal_moves(piece_name, node_id, board_state, current_color, spider_cont
                 legal_moves.append(neighbor_id)
         return legal_moves
 
+def can_orc_promote(piece_name, destination_node, player_color):
+    """Check if an orc can be promoted at the destination node."""
+    if 'orc' not in piece_name:
+        return False
+    
+    # Check if destination is in resurrection zone for this player
+    resurrection_nodes = RESURRECTION_ZONES.get(player_color, [])
+    return destination_node in resurrection_nodes
+
+def get_promotable_pieces(captured_pieces):
+    """Get list of non-orc pieces that can be used for promotion."""
+    promotable = []
+    for piece in captured_pieces:
+        if 'orc' not in piece and 'matron mother' not in piece:
+            promotable.append(piece)
+    return promotable
+
 def notify_lobby_update(lobby_id, event_type, data=None):
     """Send WebSocket notification to all players in a lobby."""
     if lobby_id in lobbies:
@@ -413,7 +431,11 @@ class Lobby:
             'red': 0,  # Red player's turn counter
             'blue': 0   # Blue player's turn counter
         },
-        'chat_messages': []  # Chat messages for this lobby
+        'chat_messages': [],  # Chat messages for this lobby
+        'promotion_mode': False,  # True when waiting for piece selection
+        'promotion_player': None,  # Player who can promote
+        'promotion_node': None,  # Node where promotion is happening
+        'promotion_orc': None  # Name of the orc being promoted
         }
 
     def add_player(self, player_id, player_name):
@@ -702,6 +724,40 @@ class Lobby:
                 'player': player['color'],
                 'move_type': 'single_node'
             }
+        
+        # Check for orc promotion before switching turns
+        final_destination = to_node
+        if '->' in to_node:
+            # Handle complex moves to get final destination
+            nodes = to_node.split('->')
+            if 'weaponmaster' in piece_name and len(nodes) == 2:
+                final_destination = nodes[1]
+            elif 'wizard' in piece_name and len(nodes) == 3:
+                final_destination = nodes[2]
+        
+        # Check if this move should trigger orc promotion
+        if can_orc_promote(piece_name, final_destination, player['color']):
+            # Get pieces that were captured by the enemy (our own pieces that can be resurrected)
+            enemy_color = 'blue' if player['color'] == 'red' else 'red'
+            promotable_pieces = get_promotable_pieces(self.game_state['captured_pieces'][enemy_color])
+            if promotable_pieces:
+                # Enter promotion mode - don't switch turns yet
+                self.game_state['promotion_mode'] = True
+                self.game_state['promotion_player'] = player['color']
+                self.game_state['promotion_node'] = final_destination
+                self.game_state['promotion_orc'] = piece_name
+                
+                # Notify about promotion opportunity
+                notify_lobby_update(self.lobby_id, 'orc_promotion_available', {
+                    'promotable_pieces': promotable_pieces,
+                    'promotion_node': final_destination,
+                    'player': player['color']
+                })
+                
+                print(f"🔄 Orc promotion available for {player['color']} at {final_destination}")
+                print(f"Available pieces (captured by {enemy_color}): {promotable_pieces}")
+                
+                return True, self.game_state
         
         # Increment the current player's turn counter
         self.game_state['player_turn_numbers'][player['color']] += 1
@@ -1042,6 +1098,69 @@ class Lobby:
         
         # Notify all players about the move
         notify_lobby_update(self.lobby_id, 'controlled_piece_moved', self.game_state)
+        
+        return True, self.game_state
+    
+    def promote_orc(self, player_id, selected_piece):
+        """Promote an orc to a selected piece from captured pieces."""
+        # Verify the game has started
+        if not self.game_state['game_started']:
+            return False, "Game not started"
+        
+        # Find the player
+        player = next((p for p in self.players if p['id'] == player_id), None)
+        if not player:
+            return False, "Player not found"
+        
+        # Check if we're in promotion mode
+        if not self.game_state.get('promotion_mode', False):
+            return False, "Not in promotion mode"
+        
+        # Check if it's the correct player
+        if self.game_state.get('promotion_player') != player['color']:
+            return False, "Not your promotion"
+        
+        # Check if the selected piece is available for promotion
+        # We look in the enemy's captured pieces (our own pieces that were captured)
+        enemy_color = 'blue' if player['color'] == 'red' else 'red'
+        captured_pieces = self.game_state['captured_pieces'][enemy_color]
+        promotable_pieces = get_promotable_pieces(captured_pieces)
+        
+        if selected_piece not in promotable_pieces:
+            return False, "Selected piece not available for promotion"
+        
+        # Remove the selected piece from the enemy's captured pieces (they lose the captured piece)
+        self.game_state['captured_pieces'][enemy_color].remove(selected_piece)
+        
+        # Replace the orc with the promoted piece
+        promotion_node = self.game_state['promotion_node']
+        self.game_state['board'][promotion_node] = selected_piece
+        
+        # Create move record
+        self.game_state['last_move'] = {
+            'move_type': 'orc_promotion',
+            'player': player['color'],
+            'promoted_from': self.game_state['promotion_orc'],
+            'promoted_to': selected_piece,
+            'promotion_node': promotion_node
+        }
+        
+        # Clear promotion mode
+        self.game_state['promotion_mode'] = False
+        self.game_state['promotion_player'] = None
+        self.game_state['promotion_node'] = None
+        self.game_state['promotion_orc'] = None
+        
+        # Increment the current player's turn counter
+        self.game_state['player_turn_numbers'][player['color']] += 1
+        
+        # Switch turns after promotion
+        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        
+        print(f"🔄 Orc promoted: {self.game_state.get('promotion_orc', 'unknown')} -> {selected_piece} at {promotion_node}")
+        
+        # Notify all players about the promotion
+        notify_lobby_update(self.lobby_id, 'orc_promoted', self.game_state)
         
         return True, self.game_state
     
@@ -1444,6 +1563,29 @@ def handle_send_chat_message(data):
     else:
         emit('chat_error', {'error': 'Lobby not found'})
 
+@socketio.on('promote_orc')
+def handle_promote_orc(data):
+    lobby_id = data.get('lobby_id')
+    selected_piece = data.get('selected_piece')
+    player_id = data.get('player_id')
+    
+    print(f'WebSocket: Player {player_id} promoting orc to {selected_piece} in lobby {lobby_id}')
+    
+    if lobby_id in lobbies:
+        lobby = lobbies[lobby_id]
+        
+        # Promote the orc
+        success, result = lobby.promote_orc(player_id, selected_piece)
+        
+        if success:
+            # Notify all players about the promotion
+            notify_lobby_update(lobby_id, 'orc_promoted', result)
+        else:
+            # Send error back to the player
+            emit('promotion_error', {'error': result})
+    else:
+        emit('promotion_error', {'error': 'Lobby not found'})
+
 @app.route('/')
 def landing():
     return render_template('landing.html')
@@ -1781,6 +1923,38 @@ def send_chat_message_api(lobby_id):
         return jsonify({
             'success': True,
             'message': result
+        })
+    else:
+        return jsonify({'error': result}), 400
+
+@app.route('/api/lobby/<lobby_id>/promote-orc', methods=['POST'])
+def promote_orc_api(lobby_id):
+    """Promote an orc to a selected piece."""
+    if lobby_id not in lobbies:
+        return jsonify({'error': 'Lobby not found'}), 404
+    
+    data = request.get_json()
+    selected_piece = data.get('selected_piece')
+    player_id = data.get('player_id')
+    
+    if not selected_piece or not player_id:
+        return jsonify({'error': 'Selected piece and Player ID required'}), 400
+    
+    lobby = lobbies[lobby_id]
+    
+    # Verify player is in this lobby
+    player = next((p for p in lobby.players if p['id'] == player_id), None)
+    if not player:
+        return jsonify({'error': 'Player not in lobby'}), 403
+    
+    # Promote the orc
+    success, result = lobby.promote_orc(player_id, selected_piece)
+    
+    if success:
+        return jsonify({
+            'success': True,
+            'game_state': result,
+            'lobby_info': lobby.get_lobby_info()
         })
     else:
         return jsonify({'error': result}), 400

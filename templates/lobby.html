@@ -294,6 +294,142 @@
         .chat-messages::-webkit-scrollbar-thumb:hover {
             background: #999;
         }
+
+        /* Orc Promotion Modal Styles */
+        .promotion-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .promotion-overlay.show {
+            display: flex;
+        }
+
+        .promotion-modal {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .promotion-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .promotion-header h3 {
+            color: #333;
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+        }
+
+        .promotion-header p {
+            color: #666;
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .promotion-pieces {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .promotion-piece {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .promotion-piece:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+            transform: translateY(-2px);
+        }
+
+        .promotion-piece.selected {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #5a67d8;
+        }
+
+        .promotion-piece-symbol {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .promotion-piece-name {
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-transform: capitalize;
+        }
+
+        .promotion-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .promotion-confirm {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            flex: 1;
+        }
+
+        .promotion-confirm:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .promotion-confirm:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .promotion-modal {
+                margin: 1rem;
+                width: calc(100% - 2rem);
+                padding: 1.5rem;
+            }
+
+            .promotion-pieces {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.75rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -449,6 +585,27 @@
         
         <div class="rules-content" id="rules-content">
             <div class="loading">Loading rules...</div>
+        </div>
+    </div>
+
+    <!-- Orc Promotion Modal -->
+    <div class="promotion-overlay" id="promotion-overlay">
+        <div class="promotion-modal">
+            <div class="promotion-header">
+                <h3>🔄 Orc Promotion</h3>
+                <p>Your orc has reached enemy territory! Choose a captured piece to resurrect:</p>
+            </div>
+            
+            <div class="promotion-pieces" id="promotion-pieces">
+                <!-- Available pieces will be populated here -->
+            </div>
+            
+            <div class="promotion-footer">
+                <button class="btn secondary" onclick="closePromotionModal()">Cancel</button>
+                <button class="promotion-confirm" id="promotion-confirm-btn" onclick="confirmPromotion()" disabled>
+                    Select a piece first
+                </button>
+            </div>
         </div>
     </div>
 
@@ -826,6 +983,31 @@
                 case 'chat_message_sent':
                     console.log('Chat message received via WebSocket:', eventData);
                     addChatMessage(eventData);
+                    break;
+                    
+                case 'orc_promotion_available':
+                    console.log('Orc promotion available via WebSocket:', eventData);
+                    showPromotionModal(eventData);
+                    break;
+                    
+                case 'orc_promoted':
+                    console.log('Orc promoted via WebSocket:', eventData);
+                    if (gameBoard && lobby_info.game_state.board) {
+                        gameBoard.updateBoardWithPieces(lobby_info.game_state.board);
+                    }
+                    closePromotionModal();
+                    
+                    // Update status
+                    const promotionInfo = lobby_info.game_state.last_move;
+                    if (promotionInfo && promotionInfo.move_type === 'orc_promotion') {
+                        let statusText = `${promotionInfo.player.charAt(0).toUpperCase() + promotionInfo.player.slice(1)} promoted ${promotionInfo.promoted_from} to ${promotionInfo.promoted_to}`;
+                        const currentTurn = lobby_info.game_state.current_turn;
+                        statusText += `. ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}'s turn.`;
+                        document.getElementById('status-text').textContent = statusText;
+                    }
+                    
+                    // Update captured pieces display
+                    updateCapturedPieces();
                     break;
                     
                 default:
@@ -3536,6 +3718,99 @@
             // Update spider dice button state
             updateSpiderDiceButtonState();
         }
+        
+        // Orc Promotion Functions
+        let selectedPromotionPiece = null;
+        
+        function showPromotionModal(data) {
+            const { promotable_pieces, promotion_node, player } = data;
+            
+            // Check if this promotion is for the current player
+            const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
+            if (!currentPlayer || currentPlayer.color !== player) {
+                console.log('Promotion not for current player, ignoring');
+                return;
+            }
+            
+            console.log('🔄 Showing promotion modal for pieces:', promotable_pieces);
+            
+            const modal = document.getElementById('promotion-overlay');
+            const piecesContainer = document.getElementById('promotion-pieces');
+            const confirmBtn = document.getElementById('promotion-confirm-btn');
+            
+            // Clear previous pieces
+            piecesContainer.innerHTML = '';
+            selectedPromotionPiece = null;
+            
+            // Update confirm button
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Select a piece first';
+            
+            // Add available pieces
+            promotable_pieces.forEach(piece => {
+                const pieceElement = document.createElement('div');
+                pieceElement.className = 'promotion-piece';
+                pieceElement.setAttribute('data-piece', piece);
+                
+                const symbol = getPieceSymbol(piece);
+                const name = piece.split('_')[1].replace(/[0-9]/g, '');
+                
+                pieceElement.innerHTML = `
+                    <div class="promotion-piece-symbol">${symbol}</div>
+                    <div class="promotion-piece-name">${name}</div>
+                `;
+                
+                pieceElement.onclick = () => selectPromotionPiece(piece, pieceElement);
+                piecesContainer.appendChild(pieceElement);
+            });
+            
+            // Show modal
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function selectPromotionPiece(piece, element) {
+            // Remove previous selection
+            document.querySelectorAll('.promotion-piece').forEach(p => p.classList.remove('selected'));
+            
+            // Select new piece
+            element.classList.add('selected');
+            selectedPromotionPiece = piece;
+            
+            // Update confirm button
+            const confirmBtn = document.getElementById('promotion-confirm-btn');
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = `Promote to ${piece.split('_')[1].replace(/[0-9]/g, '')}`;
+        }
+        
+        function confirmPromotion() {
+            if (!selectedPromotionPiece) return;
+            
+            const lobbyId = document.getElementById('lobby-id').textContent;
+            
+            // Send promotion via WebSocket
+            socket.emit('promote_orc', {
+                lobby_id: lobbyId,
+                selected_piece: selectedPromotionPiece,
+                player_id: playerId
+            });
+            
+            console.log('🔄 Promoting orc to:', selectedPromotionPiece);
+        }
+        
+        function closePromotionModal() {
+            const modal = document.getElementById('promotion-overlay');
+            modal.classList.remove('show');
+            document.body.style.overflow = '';
+            selectedPromotionPiece = null;
+        }
+        
+        // Listen for promotion errors
+        socket.on('promotion_error', function(data) {
+            console.error('Promotion error:', data.error);
+            document.getElementById('status-text').textContent = 'Promotion failed: ' + data.error;
+            closePromotionModal();
+        });
     </script>
 </body>
 </html> 

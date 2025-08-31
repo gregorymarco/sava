@@ -85,5 +85,9 @@
         "blue_orc_5": "R2N2",
         "blue_orc_6": "R1N3",
         "blue_orc_7": "R1N5"
+    },
+    "resurrection_zones": {
+        "red": ["R1N5", "R1N4", "R1N3", "R2N5", "R2N4", "R2N3", "R3N5", "R3N4", "R3N3"],
+        "blue": ["R3N11", "R3N12", "R3N13", "R2N11", "R2N12", "R2N13", "R1N11", "R1N12", "R1N13"]
     }
 } 
