@@ -11,16 +11,24 @@ app = Flask(__name__)
 # Production configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
 
-# CORS configuration - more restrictive for production
-allowed_origins = os.environ.get('ALLOWED_ORIGINS', '*').split(',')
-CORS(app, origins=allowed_origins)
+# CORS configuration - handle development and production
+allowed_origins_env = os.environ.get('ALLOWED_ORIGINS', '*')
+if allowed_origins_env == '*':
+    # Allow all origins for development/testing
+    socketio_cors_origins = '*'  # Allow all for SocketIO
+else:
+    # Use specific origins for production
+    socketio_cors_origins = allowed_origins_env.split(',')
+
+# Use Flask-CORS with specific configuration that works
+CORS(app, origins=['*'], supports_credentials=True)
 
 # SocketIO configuration for production
 # Use threading mode for maximum compatibility across platforms
 async_mode = 'threading'
 
 socketio_kwargs = {
-    'cors_allowed_origins': allowed_origins,
+    'cors_allowed_origins': socketio_cors_origins,
     'async_mode': async_mode,
     'logger': False,
     'engineio_logger': False
