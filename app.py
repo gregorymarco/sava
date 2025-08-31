@@ -1288,6 +1288,52 @@ class Lobby:
         
         return False
     
+    def _get_threatening_pieces(self, player_color):
+        """Get list of enemy pieces that are threatening the player's Matron Mother."""
+        threatening_pieces = []
+        
+        # Find the player's Matron Mother
+        matron_mother_node = None
+        for node, piece in self.game_state['board'].items():
+            if piece == f"{player_color}_matron mother":
+                matron_mother_node = node
+                break
+        
+        if not matron_mother_node:
+            return threatening_pieces
+        
+        # Check each enemy piece
+        enemy_color = 'blue' if player_color == 'red' else 'red'
+        for node, piece in self.game_state['board'].items():
+            if piece.startswith(enemy_color + '_'):
+                # Get all possible moves for this enemy piece
+                legal_moves = get_legal_moves(piece, node, self.game_state['board'], enemy_color)
+                
+                # For wizard moves, only check the final destination, not intermediate nodes
+                if 'wizard' in piece:
+                    # Filter wizard moves to only include final destinations
+                    filtered_moves = set()
+                    for move in legal_moves:
+                        if '->' in move:
+                            # Wizard move with path - only include final destination
+                            nodes = move.split('->')
+                            if len(nodes) == 3:
+                                filtered_moves.add(nodes[2])  # Final destination only
+                        else:
+                            # Single node move
+                            filtered_moves.add(move)
+                    legal_moves = filtered_moves
+                
+                # Check if this piece can capture the Matron Mother
+                if matron_mother_node in legal_moves:
+                    threatening_pieces.append({
+                        'node_id': node,
+                        'piece_name': piece,
+                        'piece_type': piece.split('_')[1]
+                    })
+        
+        return threatening_pieces
+    
     def _does_move_resolve_check(self, from_node, to_node, piece_name, player_color):
         """Check if a move resolves the current check."""
         # Create a temporary board state to simulate the move
@@ -1779,7 +1825,7 @@ def sacrifice_piece_api(lobby_id):
 
 @app.route('/api/lobby/<lobby_id>/check-status', methods=['GET'])
 def check_status_api(lobby_id):
-    """Check if the current player is in check."""
+    """Check if a player is in check and return threatening pieces."""
     if lobby_id not in lobbies:
         return jsonify({'error': 'Lobby not found'}), 404
     
@@ -1789,15 +1835,21 @@ def check_status_api(lobby_id):
     if not lobby.game_state['game_started']:
         return jsonify({'error': 'Game not started'}), 400
     
-    # Get current turn
-    current_turn = lobby.game_state['current_turn']
+    # Get player color from query parameter or use current turn
+    player_color = request.args.get('player', lobby.game_state['current_turn'])
     
-    # Check if current player is in check
-    is_in_check = lobby._is_player_in_check(current_turn)
+    # Check if player is in check
+    is_in_check = lobby._is_player_in_check(player_color)
+    
+    # Find threatening pieces if in check
+    threatening_pieces = []
+    if is_in_check:
+        threatening_pieces = lobby._get_threatening_pieces(player_color)
     
     return jsonify({
-        'current_turn': current_turn,
-        'is_in_check': is_in_check
+        'player': player_color,
+        'is_in_check': is_in_check,
+        'threatening_pieces': threatening_pieces
     })
 
 @app.route('/api/lobby/<lobby_id>/check-move', methods=['POST'])
