@@ -4,9 +4,29 @@ This guide explains how to deploy the Sava game application using Gunicorn for p
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.11+ (recommended for best compatibility)
 - pip package manager
 - Virtual environment (recommended)
+
+## Render.com Deployment
+
+For easy deployment to Render.com:
+
+### Build Settings
+- **Build Command**: `./render_build.sh`
+- **Start Command**: `./start_production.sh`
+- **Python Version**: Use `runtime.txt` file (Python 3.11.9)
+
+### Environment Variables in Render
+Set these in your Render service settings:
+- `SECRET_KEY`: Generate a secure random key
+- `ALLOWED_ORIGINS`: Your domain (e.g., `https://yourdomain.onrender.com`)
+- `LOG_LEVEL`: `info` (or `debug` for troubleshooting)
+
+### Files for Render
+- `runtime.txt`: Specifies Python version
+- `render_build.sh`: Build script for Render
+- `start_production.sh`: Start script for the application
 
 ## Installation
 

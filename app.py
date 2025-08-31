@@ -16,10 +16,10 @@ allowed_origins = os.environ.get('ALLOWED_ORIGINS', '*').split(',')
 CORS(app, origins=allowed_origins)
 
 # SocketIO configuration for production
-# Check if we can use eventlet, otherwise fall back to threading
+# Check if we can use gevent, otherwise fall back to threading
 try:
-    import eventlet
-    async_mode = 'eventlet'
+    import gevent
+    async_mode = 'gevent'
 except ImportError:
     async_mode = 'threading'
 
