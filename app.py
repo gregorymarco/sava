@@ -183,7 +183,6 @@ def would_move_put_matron_in_check(from_node, to_node, board_state, current_colo
 
 def get_legal_moves_for_orc(node_id, board_state, current_color, spider_control=False):
     """Calculate legal moves for an Orc piece."""
-    # print(f"DEBUG: Orc legal moves - node_id: {node_id}, spider_control: {spider_control}")
     legal_moves = set()
     neighbors = get_neighboring_nodes(node_id)
     
@@ -191,14 +190,11 @@ def get_legal_moves_for_orc(node_id, board_state, current_color, spider_control=
         # Check if this is a capture move
         if neighbor_id in board_state:
             piece_name = board_state[neighbor_id]
-            # print(f"DEBUG: Orc considering capture - neighbor: {neighbor_id}, piece: {piece_name}")
             if spider_control:
                 # In spider control mode, can capture any piece
-                print(f"DEBUG: Spider control - adding capture move {neighbor_id}")
                 legal_moves.add(neighbor_id)
             elif not piece_name.startswith(current_color + '_'):
                 # Regular mode: can only capture enemy pieces
-                print(f"DEBUG: Regular mode - adding enemy capture {neighbor_id}")
                 legal_moves.add(neighbor_id)
             # Skip if it's own piece and not in spider control mode
         else:
@@ -211,8 +207,6 @@ def get_legal_moves_for_orc(node_id, board_state, current_color, spider_control=
             # 2. We're moving away but there are still enemies at the new position
             if not current_has_enemies or new_has_enemies:
                 legal_moves.add(neighbor_id)
-    
-    #print(f"DEBUG: Orc final legal moves: {list(legal_moves)}")
     return list(legal_moves)
 
 def get_legal_moves_for_priestess(node_id, board_state, current_color, spider_control=False):
@@ -544,12 +538,9 @@ class Lobby:
         if self.game_state['player_time_remaining'][player_color] < 0:
             self.game_state['player_time_remaining'][player_color] = 0
         
-        print(f"⏰ Timer update for {player_color}: {elapsed_time:.1f}s elapsed, {self.game_state['player_time_remaining'][player_color]:.1f}s remaining")
-
     def _start_next_player_timer(self, next_player_color):
         """Start the timer for the next player's turn."""
         self.game_state['turn_start_time'] = datetime.now().timestamp()
-        print(f"⏰ Timer started for {next_player_color} player")
 
     def _check_time_expired(self, player_color):
         """Check if a player's time has expired."""
@@ -567,10 +558,7 @@ class Lobby:
         
         # Player has timed out if elapsed time >= remaining time
         has_timed_out = elapsed_this_turn >= remaining_time
-        
-        if has_timed_out:
-            print(f"⏰ Server timeout validation: {player_color} used {elapsed_this_turn:.1f}s but only had {remaining_time:.1f}s remaining")
-        
+
         return has_timed_out
 
     def handle_player_timeout(self, player_color):
@@ -588,11 +576,6 @@ class Lobby:
         self.game_state['winner'] = winner_color
         self.game_state['game_end_reason'] = 'timeout'
         self.game_state['timeout_player'] = player_color
-        
-        print(f"⏰ TIMEOUT! {player_color.upper()} player ran out of time!")
-        print(f"🏆 Winner: {winner_color} (opponent timed out)")
-        print(f"💀 Loser: {player_color} (timed out)")
-        print(f"🎮 Game ended due to timeout")
         
         # Notify all players about the timeout
         notify_lobby_update(self.lobby_id, 'player_timeout', {
@@ -643,9 +626,7 @@ class Lobby:
 
     def auto_start_game(self):
         """Automatically start the game with default piece mapping when two players join."""
-        print(f"Auto-starting game for lobby {self.lobby_id}")
-        print(f"Players: {[p['id'] for p in self.players]}")
-        
+
         # Use shared configuration for piece placement
         # Note: This would need to be loaded from the shared config file
         # For now, keeping the existing mapping but it should be moved to game-config.js
@@ -666,21 +647,14 @@ class Lobby:
         
         # Check if this is a controlled piece
         is_controlled = self.game_state.get('controlled_piece_node') == node_id
-        # Debug: Log controlled piece detection
-        if is_controlled:
-            print(f"🕷️ Getting legal moves for controlled piece {node_id} ({piece_name})")
         
         # Check if it's the current player's turn OR if this is a controlled enemy piece
         if not is_controlled and current_color != self.game_state['current_turn']:
-            print(f"DEBUG: Rejecting - not controlled and not current player's turn")
             return []
         
         # Get basic legal moves (now that we know this piece can be moved)
         basic_legal_moves = get_legal_moves(piece_name, node_id, self.game_state['board'], current_color, spider_control=is_controlled)
-        # Debug: Log basic legal moves for controlled pieces
-        if is_controlled:
-            print(f"🕷️ Basic legal moves for controlled piece: {basic_legal_moves}")
-        
+
         # For controlled pieces, use the controlling player's color for check logic
         controlling_color = self.game_state['current_turn'] if is_controlled else current_color
         
@@ -697,9 +671,6 @@ class Lobby:
         for move in basic_legal_moves:
             if self._is_move_safe_for_matron_mother(node_id, move, piece_name, controlling_color):
                 safe_moves.append(move)
-        # Debug: Log final legal moves for controlled pieces
-        if is_controlled:
-            print(f"🕷️ Final legal moves for controlled piece: {safe_moves}")
         return safe_moves
 
     def execute_move(self, from_node, to_node, player_id):
@@ -716,9 +687,6 @@ class Lobby:
         
         # Verify the move is legal
         legal_moves = self.get_legal_moves_for_piece(from_node)
-        # print(f"DEBUG: Move validation - from_node: {from_node}, to_node: {to_node}")
-        # print(f"DEBUG: Legal moves: {legal_moves}")
-        # print(f"DEBUG: to_node in legal_moves: {to_node in legal_moves}")
         if to_node not in legal_moves:
             return False, "Illegal move"
         
@@ -747,7 +715,6 @@ class Lobby:
                     self.game_state['captured_pieces'][player['color']].append(captured_piece)
                     # Remove the captured piece from the board
                     del self.game_state['board'][first_node]
-                    # print(f"Piece {captured_piece} captured on first node by {player['color']} player")
                 
                 # Check for captures on second node
                 if second_node in self.game_state['board']:
@@ -756,7 +723,6 @@ class Lobby:
                     self.game_state['captured_pieces'][player['color']].append(captured_piece)
                     # Remove the captured piece from the board
                     del self.game_state['board'][second_node]
-                    # print(f"Piece {captured_piece} captured on second node by {player['color']} player")
                 
                 # Remove piece from source and place at final destination
                 del self.game_state['board'][from_node]
@@ -772,10 +738,6 @@ class Lobby:
                     'player': player['color'],
                     'move_type': 'weaponmaster_two_node'
                 }
-                
-                # print(f"Weaponmaster move completed. Captured pieces: {captured_pieces}")
-                # print(f"Total captured pieces for {player['color']}: {self.game_state['captured_pieces'][player['color']]}")
-                # print(f"Board state after weaponmaster move: {self.game_state['board']}")
             else:
                 return False, "Invalid weaponmaster move format"
         elif 'wizard' in piece_name and '->' in to_node:
@@ -797,7 +759,6 @@ class Lobby:
                     self.game_state['captured_pieces'][player['color']].append(captured_piece)
                     # Remove the captured piece from the board
                     del self.game_state['board'][third_node]
-                    # print(f"Piece {captured_piece} captured on final node by {player['color']} player")
                 
                 # Remove piece from source and place at final destination
                 del self.game_state['board'][from_node]
@@ -813,10 +774,6 @@ class Lobby:
                     'player': player['color'],
                     'move_type': 'wizard_three_node'
                 }
-                
-                # print(f"Wizard three-node move completed. Captured pieces: {captured_pieces}")
-                # print(f"Total captured pieces for {player['color']}: {self.game_state['captured_pieces'][player['color']]}")
-                # print(f"Board state after wizard move: {self.game_state['board']}")
             else:
                 return False, "Invalid wizard move format"
         else:
@@ -832,7 +789,6 @@ class Lobby:
                 self.game_state['captured_pieces'][player['color']].append(captured_piece)
                 # Remove the captured piece from the board
                 del self.game_state['board'][to_node]
-                # print(f"Piece {captured_piece} captured by {player['color']} player")
                 captured_pieces = [captured_piece]
             
             # Place piece at destination
@@ -876,10 +832,6 @@ class Lobby:
                     'promotion_node': final_destination,
                     'player': player['color']
                 })
-                
-                print(f"🔄 Orc promotion available for {player['color']} at {final_destination}")
-                print(f"Available pieces (captured by {enemy_color}): {promotable_pieces}")
-                
                 return True, self.game_state
         
         # Update timer for the current player before switching turns
@@ -897,14 +849,7 @@ class Lobby:
         
         # Check if the next player is in check
         next_player_color = self.game_state['current_turn']
-        if self._is_player_in_check(next_player_color):
-            print(f"⚠️  {next_player_color.upper()} player is in CHECK!")
-            print(f"🎯 {next_player_color} player must make a move that resolves the check")
-            
-            # Check if they have any legal moves
-            if not self._does_player_have_legal_moves(next_player_color):
-                print(f"🚨 {next_player_color.upper()} player has NO LEGAL MOVES while in check!")
-        
+
         # Check if the next player is in checkmate
         if self._is_player_in_checkmate(next_player_color):
             # Game over - the player who just moved wins
@@ -995,25 +940,17 @@ class Lobby:
             # Set sacrifice mode for the current player
             self.game_state['sacrifice_mode'] = True
             self.game_state['sacrifice_player'] = player['color']
-            print(f"🔪🔪 DOUBLE KNIVES! {player['color']} player must sacrifice a piece!")
         elif both_spiders:
             # Set spider control mode for the current player
             self.game_state['spider_control_mode'] = True
             self.game_state['spider_control_player'] = player['color']
-            print(f"🕷️🕷️ DOUBLE SPIDERS! {player['color']} player can control an enemy piece!")
         else:
             # Update timer for current player and switch turns for normal results
             self._update_turn_timer(player['color'])
             next_player_color = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
             self.game_state['current_turn'] = next_player_color
             self._start_next_player_timer(next_player_color)
-        
-        print(f"🎲 {player['color']} player rolled spider dice: {die1} ({'🕷️' if die1_spider else '🔪'}) and {die2} ({'🕷️' if die2_spider else '🔪'})")
-        if both_spiders:
-            print(f"🕷️🕷️ The spider queen answers your prayers!")
-        elif both_knives:
-            print(f"🔪🔪 {player['color']} player must sacrifice a piece!")
-        
+
         # Notify all players about the dice roll
         notify_lobby_update(self.lobby_id, 'spider_dice_rolled', self.game_state)
         
@@ -1034,8 +971,6 @@ class Lobby:
         sacrifice_mode = self.game_state.get('sacrifice_mode', False)
         sacrifice_player = self.game_state.get('sacrifice_player')
         current_turn = self.game_state['current_turn']
-        
-        print(f"🔪 SACRIFICE DEBUG: player={player['color']}, current_turn={current_turn}, sacrifice_mode={sacrifice_mode}, sacrifice_player={sacrifice_player}")
         
         if sacrifice_mode:
             # In sacrifice mode, only the designated sacrifice player can sacrifice
@@ -1134,8 +1069,6 @@ class Lobby:
             'controlled_node': node_id
         }
         
-        print(f"🕷️ {player['color']} player takes control of {piece_name} at {node_id}")
-        
         # Notify all players about the control
         notify_lobby_update(self.lobby_id, 'enemy_piece_controlled', self.game_state)
         
@@ -1178,7 +1111,6 @@ class Lobby:
         # Temporarily update the piece name to match the controlling player's color for execution
         temp_piece_name = f"{player['color']}_{piece_name.split('_', 1)[1]}"
         original_piece_name = self.game_state['board'][from_node]
-        print(f"DEBUG: Controlled move - original_piece_name: {original_piece_name}, temp_piece_name: {temp_piece_name}")
         self.game_state['board'][from_node] = temp_piece_name
         
         # Execute the move using existing logic
@@ -1204,7 +1136,6 @@ class Lobby:
             final_position = to_node
         
         # Restore original piece name at final position
-        print(f"DEBUG: Restoring piece {piece_name} at final position {final_position}")
         self.game_state['board'][final_position] = piece_name
         captured_pieces = result['last_move'].get('captured', [])
         
@@ -1234,10 +1165,7 @@ class Lobby:
         next_player_color = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
         self.game_state['current_turn'] = next_player_color
         self._start_next_player_timer(next_player_color)
-        
-        print(f"🕷️ Controlled move completed: {from_node} -> {final_position}")
-        print(f"Captured pieces: {captured_pieces}")
-        
+
         # Notify all players about the move
         notify_lobby_update(self.lobby_id, 'controlled_piece_moved', self.game_state)
         
@@ -1301,8 +1229,6 @@ class Lobby:
         next_player_color = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
         self.game_state['current_turn'] = next_player_color
         self._start_next_player_timer(next_player_color)
-        
-        print(f"🔄 Orc promoted: {self.game_state.get('promotion_orc', 'unknown')} -> {selected_piece} at {promotion_node}")
         
         # Notify all players about the promotion
         notify_lobby_update(self.lobby_id, 'orc_promoted', self.game_state)
@@ -1569,7 +1495,6 @@ class Lobby:
     
     def _does_player_have_legal_moves(self, player_color):
         """Check if a player has any legal moves available."""
-        print(f"🔍 Checking legal moves for {player_color} player...")
         total_basic_moves = 0
         total_legal_moves = 0
         
@@ -1578,30 +1503,19 @@ class Lobby:
                 # Get basic legal moves for this piece
                 basic_legal_moves = get_legal_moves(piece_name, node_id, self.game_state['board'], player_color)
                 total_basic_moves += len(basic_legal_moves)
-                
-                if basic_legal_moves:
-                    print(f"  📍 {piece_name} at {node_id}: {len(basic_legal_moves)} basic moves")
-                
+
                 # If not in check, filter out moves that would put own Matron Mother in check
                 if not self._is_player_in_check(player_color):
                     for move in basic_legal_moves:
                         if self._is_move_safe_for_matron_mother(node_id, move, piece_name, player_color):
                             total_legal_moves += 1
-                            print(f"    ✅ Legal move: {node_id} -> {move}")
                             return True
-                        else:
-                            print(f"    ❌ Move blocked (would put Matron Mother in check): {node_id} -> {move}")
                 else:
                     # If in check, check if any move resolves the check
                     for move in basic_legal_moves:
                         if self._does_move_resolve_check(node_id, move, piece_name, player_color):
                             total_legal_moves += 1
-                            print(f"    ✅ Legal move (resolves check): {node_id} -> {move}")
                             return True
-                        else:
-                            print(f"    ❌ Move blocked (doesn't resolve check): {node_id} -> {move}")
-        
-        print(f"📊 {player_color} player: {total_basic_moves} basic moves, {total_legal_moves} legal moves")
         return False
 
 # WebSocket event handlers
@@ -1616,15 +1530,10 @@ def handle_disconnect():
 @socketio.on('join_lobby')
 def handle_join_lobby(data):
     lobby_id = data.get('lobby_id')
-    player_id = data.get('player_id')
-    
-    print(f'WebSocket: Player {player_id} joining lobby {lobby_id}')
     
     if lobby_id in lobbies:
         join_room(lobby_id)
-        print(f'WebSocket: Player {player_id} joined room {lobby_id}')
-        print(f'Current lobby state: {lobbies[lobby_id].get_lobby_info()}')
-        
+
         # Send current lobby state to the joining player
         lobby_info = lobbies[lobby_id].get_lobby_info()
         # Convert datetime objects to strings for JSON serialization
@@ -1637,10 +1546,7 @@ def handle_join_lobby(data):
         # Check if we should auto-start the game after this player joins
         lobby = lobbies[lobby_id]
         if len(lobby.players) == 2 and not lobby.game_state['game_started']:
-            print(f'Auto-starting game for lobby {lobby_id}')
             lobby.auto_start_game()
-    else:
-        print(f'WebSocket: Lobby {lobby_id} not found')
 
 @socketio.on('leave_lobby')
 def handle_leave_lobby(data):
@@ -1649,7 +1555,6 @@ def handle_leave_lobby(data):
     
     if lobby_id in lobbies:
         leave_room(lobby_id)
-        print(f'Player {player_id} left lobby {lobby_id}')
         
         # Remove player from lobby
         lobby = lobbies[lobby_id]
@@ -1666,8 +1571,6 @@ def handle_sacrifice_piece(data):
     lobby_id = data.get('lobby_id')
     node_id = data.get('node_id')
     player_id = data.get('player_id')
-    
-    print(f'WebSocket: Player {player_id} sacrificing piece at node {node_id} in lobby {lobby_id}')
     
     if lobby_id in lobbies:
         lobby = lobbies[lobby_id]
@@ -1689,8 +1592,6 @@ def handle_control_enemy_piece(data):
     lobby_id = data.get('lobby_id')
     node_id = data.get('node_id')
     player_id = data.get('player_id')
-    
-    print(f'WebSocket: Player {player_id} controlling enemy piece at node {node_id} in lobby {lobby_id}')
     
     if lobby_id in lobbies:
         lobby = lobbies[lobby_id]
@@ -1714,8 +1615,6 @@ def handle_move_controlled_piece(data):
     to_node = data.get('to_node')
     player_id = data.get('player_id')
     
-    print(f'WebSocket: Player {player_id} moving controlled piece from {from_node} to {to_node} in lobby {lobby_id}')
-    
     if lobby_id in lobbies:
         lobby = lobbies[lobby_id]
         
@@ -1736,8 +1635,6 @@ def handle_send_chat_message(data):
     lobby_id = data.get('lobby_id')
     message = data.get('message')
     player_id = data.get('player_id')
-    
-    print(f'WebSocket: Player {player_id} sending chat message in lobby {lobby_id}: {message}')
     
     if lobby_id in lobbies:
         lobby = lobbies[lobby_id]
@@ -1760,8 +1657,6 @@ def handle_promote_orc(data):
     selected_piece = data.get('selected_piece')
     player_id = data.get('player_id')
     
-    print(f'WebSocket: Player {player_id} promoting orc to {selected_piece} in lobby {lobby_id}')
-    
     if lobby_id in lobbies:
         lobby = lobbies[lobby_id]
         
@@ -1781,8 +1676,6 @@ def handle_promote_orc(data):
 def handle_player_timeout(data):
     lobby_id = data.get('lobby_id')
     player_id = data.get('player_id')
-    
-    print(f'WebSocket: Player {player_id} timed out in lobby {lobby_id}')
     
     if lobby_id in lobbies:
         lobby = lobbies[lobby_id]
@@ -1846,11 +1739,7 @@ def join_lobby_api(lobby_id):
     
     lobby = lobbies[lobby_id]
     role = lobby.add_player(player_id, player_name)
-    
-    print(f"Player {player_id} joined lobby {lobby_id} as {role}")
-    print(f"Current players: {[p['id'] for p in lobby.players]}")
-    print(f"Current spectators: {[s['id'] for s in lobby.spectators]}")
-    
+
     # Notify all players about the new player
     notify_lobby_update(lobby_id, 'player_joined', {'player_id': player_id, 'role': role})
     

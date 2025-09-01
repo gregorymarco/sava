@@ -71,11 +71,6 @@
                             Cancel Weaponmaster Move
                         </button>
                     </div>
-                    
-                    <!-- Board refresh button -->
-                    <button class="btn secondary dev-feature" id="refresh-board-btn" onclick="gameBoard.refreshBoard()" style="margin-top: 0.5rem;">
-                        🔄 Refresh Board
-                    </button>
                 </div>
             </div>
         </div>
@@ -294,8 +289,6 @@
                 break;
                 
             case 'game_over':
-                // console.log('🎮 Game over via WebSocket - full event data:', eventData);
-                // console.log('🎮 Event data structure:', JSON.stringify(eventData, null, 2));
                 handleGameOver(eventData);
                 
                 // Stop timer when game ends
@@ -1042,14 +1035,7 @@
             handleNodeClick(event) {
                 const node = event.target;
                 const nodeId = node.getAttribute('data-id');
-                
-                console.log('=== NODE CLICK DEBUG ===');
-                console.log('Node clicked:', nodeId);
-                console.log('Current lobby state:', lobbyState);
-                console.log('Player role:', playerRole);
-                console.log('🕷️ Spider control mode:', this.spiderControlMode);
-                console.log('🕷️ Controlled piece node:', this.controlledPieceNode);
-                
+
                 // Only allow moves if player is a player (not spectator) and it's their turn
                 if (playerRole !== 'player') {
                     document.getElementById('status-text').textContent = 'Spectators cannot make moves';
@@ -1147,13 +1133,7 @@
                 if (pieceName) {
                     // Check if this piece belongs to the current player
                     const currentTurn = lobbyState?.game_state?.current_turn;
-                    console.log('Current turn:', currentTurn);
-                    console.log('Piece name:', pieceName);
-                    console.log('Piece starts with red_:', pieceName.startsWith('red_'));
-                    console.log('Piece starts with blue_:', pieceName.startsWith('blue_'));
-                    console.log('Piece starts with red :', pieceName.startsWith('red '));
-                    console.log('Piece starts with blue :', pieceName.startsWith('blue '));
-                    
+
                     // Safety check: ensure we have a valid current turn
                     if (!currentTurn) {
                         console.error('No current turn found in lobby state');
@@ -1170,8 +1150,6 @@
                     }
                     
                     const playerColor = currentPlayer.color;
-                    console.log('Player color:', playerColor);
-                    console.log('Current turn:', currentTurn);
                     
                     // Check if it's the player's turn OR if we're in spider control mode and it's our spider control
                     const isMyTurn = currentTurn === playerColor;
@@ -1179,14 +1157,8 @@
                     const spiderControlPlayer = lobbyState?.game_state?.spider_control_player;
                     const isMySpiderControl = spiderControlMode && spiderControlPlayer === playerColor;
                     
-                    console.log('Is my turn:', isMyTurn);
-                    console.log('Spider control mode:', spiderControlMode);
-                    console.log('Spider control player:', spiderControlPlayer);
-                    console.log('Is my spider control:', isMySpiderControl);
-                    
                     // Don't allow moves if it's not our turn and we're not in spider control
                     if (!isMyTurn && !isMySpiderControl) {
-                        console.log('Not player turn and not spider control - blocking move');
                         document.getElementById('status-text').textContent = `It's ${currentTurn}'s turn. Wait for your turn.`;
                         return;
                     }
@@ -1194,22 +1166,10 @@
                     // Check if this piece belongs to the current player (not the current turn)
                     // Piece names can be: "red_matron mother", "red_orc_0", "blue_wizard", etc.
                     const isFriendlyPiece = pieceName.startsWith(playerColor + '_') || pieceName.startsWith(playerColor + ' ');
-                    console.log('Current turn + "_":', currentTurn + '_');
-                    console.log('Current turn + " ":', currentTurn + ' ');
-                    console.log('Player color + "_":', playerColor + '_');
-                    console.log('Player color + " ":', playerColor + ' ');
-                    console.log('Is friendly piece:', isFriendlyPiece);
                     
                     // Check if this is a controlled piece (can select enemy pieces when controlled)
                     const isControlledPiece = this.controlledPieceNode === nodeId;
-                    console.log('🕷️ CONTROLLED PIECE DEBUG:');
-                    console.log('🕷️ Controlled piece node:', this.controlledPieceNode);
-                    console.log('🕷️ Current node clicked:', nodeId);
-                    console.log('🕷️ Is controlled piece:', isControlledPiece);
-                    console.log('🕷️ Spider control mode:', this.spiderControlMode);
-                    console.log('🕷️ Lobby spider control mode:', spiderControlMode);
-                    console.log('🕷️ Lobby spider control player:', spiderControlPlayer);
-                    
+
                     if (isFriendlyPiece || isControlledPiece) {
                         // This is the player's piece or a controlled enemy piece - select it and show legal moves
                         console.log('Selecting piece (friendly or controlled), getting legal moves');
@@ -1253,7 +1213,6 @@
                     document.getElementById('status-text').textContent = 
                         `Selected empty node ${nodeId}`;
                 }
-                console.log('=== END DEBUG ===');
             }
 
             async executeMove(fromNode, toNode, playerId) {
@@ -1358,23 +1317,13 @@
                     document.getElementById('status-text').innerHTML = '<strong>Failed to execute move.</strong> Please try again.';
                 }
             }
-            
-
-            
-
 
             async getLegalMoves(nodeId) {
                 try {
-                    console.log('=== GET LEGAL MOVES DEBUG ===');
-                    console.log('Getting legal moves for node:', nodeId);
-                    
                     // Double-check: ensure this is a friendly piece before making the API call
                     const boardState = lobbyState?.game_state?.board || {};
                     const pieceName = boardState[nodeId];
                     const currentTurn = lobbyState?.game_state?.current_turn;
-                    
-                    console.log('Piece name:', pieceName);
-                    console.log('Current turn:', currentTurn);
                     
                     if (pieceName && currentTurn) {
                         // Find the current player's color
@@ -1382,8 +1331,6 @@
                         if (currentPlayer) {
                             const playerColor = currentPlayer.color;
                             const isFriendlyPiece = pieceName.startsWith(playerColor + '_') || pieceName.startsWith(playerColor + ' ');
-                            console.log('Player color:', playerColor);
-                            console.log('Is friendly piece check:', isFriendlyPiece);
                             if (!isFriendlyPiece) {
                                 console.error('getLegalMoves called for enemy piece! This should not happen.');
                                 document.getElementById('status-text').textContent = 'Error: Cannot get moves for enemy piece';
@@ -1426,7 +1373,6 @@
                         document.getElementById('status-text').textContent = 
                             `No legal moves for ${nodeId}`;
                     }
-                    console.log('=== END GET LEGAL MOVES DEBUG ===');
                 } catch (error) {
                     console.error('Failed to get legal moves:', error);
                     document.getElementById('status-text').textContent = 'Failed to get legal moves';
@@ -1450,11 +1396,8 @@
                 const controlledPieceName = boardState[this.controlledPieceNode];
                 const isWeaponmaster = controlledPieceName && controlledPieceName.includes('weaponmaster');
                 
-                console.log('🕷️ Controlled piece:', controlledPieceName, 'Is weaponmaster:', isWeaponmaster);
-                
                 if (isWeaponmaster && legalMoves.some(move => move.includes('->'))) {
                     // Use weaponmaster-style highlighting for path selection
-                    console.log('🕷️ Using weaponmaster highlighting for controlled piece');
                     this.controlledWeaponmasterMode = true;
                     this.controlledWeaponmasterMoves = legalMoves;
                     this.highlightWeaponmasterMoves(legalMoves);
@@ -1474,7 +1417,6 @@
                                 node.element.classList.add('legal-move');
                                 // Store the full move path on the node for later use
                                 node.element.setAttribute('data-move-path', move);
-                                console.log('🕷️ Highlighted complex move destination:', finalDestination, 'for path:', move);
                             } else {
                                 console.warn('🕷️ Node not found for complex move destination:', finalDestination);
                             }
@@ -1483,7 +1425,6 @@
                             const node = this.nodes.find(n => n.id === move);
                             if (node) {
                                 node.element.classList.add('legal-move');
-                                console.log('🕷️ Highlighted simple move:', move);
                             } else {
                                 console.warn('🕷️ Node not found for simple move:', move);
                             }
@@ -1690,8 +1631,6 @@
                         node.element.classList.add('second-move');
                     }
                 });
-                
-                console.log('🕷️ Valid second moves shown for controlled weaponmaster', firstNodeId, ':', Array.from(validSecondNodes));
             }
             
             cancelWeaponmasterMove() {
@@ -1839,8 +1778,6 @@
                 // This method is called after resize to ensure all game state is properly restored
                 if (!lobbyState?.game_state?.board) return;
                 
-                // console.log('Restoring complete game state after resize');
-                
                 // Update the board with current pieces
                 this.updateBoardWithPieces(lobbyState.game_state.board);
                 
@@ -1880,21 +1817,17 @@
                         if (nodeToSelect) {
                             nodeToSelect.element.classList.add('selected');
                             this.selectedNode = nodeToSelect.element;
-                            console.log('✅ Selection restored after sidebar toggle');
                             
                             // Restore special move modes
                             if (currentWeaponmasterMode) {
                                 this.weaponmasterMode = true;
                                 this.getLegalMoves(currentSelection);
-                                console.log('⚔️ Weaponmaster mode restored after sidebar toggle');
                             } else if (currentWizardMode) {
                                 this.wizardMode = true;
                                 this.getLegalMoves(currentSelection);
-                                console.log('🔮 Wizard mode restored after sidebar toggle');
                             } else {
                                 // Regular piece selection - get legal moves
                                 this.getLegalMoves(currentSelection);
-                                console.log('✅ Legal moves restored after sidebar toggle');
                             }
                         }
                     }
@@ -1909,13 +1842,7 @@
             
             async rollSpiderDice() {
                 try {
-                    console.log('🎲 Rolling spider dice...');
-                    console.log('🎲 Current game state:', {
-                        player_turn_numbers: lobbyState?.game_state?.player_turn_numbers,
-                        current_turn: lobbyState?.game_state?.current_turn,
-                        player_id: playerId
-                    });
-                    
+                    console.log('🎲 Rolling spider dice...');                    
                     // Check if it's the current player's turn
                     const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
                     if (!currentPlayer) {
@@ -2084,7 +2011,6 @@
                         updateCapturedPieces();
                         
                         // Update spider dice button state after successful roll
-                        console.log('🎲 Updating spider dice button state after successful roll');
                         updateSpiderDiceButtonState();
                     } else {
                         // Hide the dice overlay on failure
@@ -2161,7 +2087,6 @@
                 // Check if the current local player is the one who should sacrifice
                 const sacrificePlayer = lobbyState?.game_state?.sacrifice_player;
                 if (!sacrificePlayer || currentPlayer.color !== sacrificePlayer) {
-                    console.log('🔪 Not the sacrifice player, no highlighting');
                     return;
                 }
                 
@@ -2300,15 +2225,11 @@
             
             async getLegalMovesForControlledPiece(nodeId) {
                 try {
-                    console.log('🕷️ Getting legal moves for controlled piece:', nodeId);
                     // For controlled pieces, we get legal moves using the original piece logic
                     // but we'll allow moves that would normally be illegal (like capturing allies)
                     const lobbyId = document.getElementById('lobby-id').textContent;
-                    console.log('🕷️ Fetching from API:', `/api/lobby/${lobbyId}/legal-moves/${nodeId}`);
                     const response = await fetch(`/api/lobby/${lobbyId}/legal-moves/${nodeId}`);
                     const data = await response.json();
-                    
-                    console.log('🕷️ API response:', data);
                     
                     if (data.legal_moves && data.legal_moves.length > 0) {
                         console.log('🕷️ Showing legal moves:', data.legal_moves);
@@ -2324,7 +2245,6 @@
             
             refreshBoard() {
                 // Force a complete refresh of the board and game state
-                console.log('Force refreshing board and game state');
                 
                 // Store current state
                 const currentBoardState = lobbyState?.game_state?.board || {};
@@ -2335,7 +2255,6 @@
                 
                 // Restore game state
                 if (Object.keys(currentBoardState).length > 0) {
-                    console.log('Restoring board state after refresh:', currentBoardState);
                     this.updateBoardWithPieces(currentBoardState);
                     
                     // Restore selection
@@ -2476,7 +2395,6 @@
         }
 
         async function initializeGameBoard() {
-            console.log('🎯 Initializing game board...');
             gameBoard = new MolecularBoard();
             
             // Wait for the board to be fully initialized
@@ -2489,12 +2407,9 @@
             }
             
             if (gameBoard.nodes && gameBoard.nodes.length > 0) {
-                console.log('🎯 Board initialized with', gameBoard.nodes.length, 'nodes');
                 
                 // If we already have game state, restore it immediately
                 if (lobbyState && lobbyState.game_state && lobbyState.game_state.board) {
-                    console.log('🎯 Restoring game state after board initialization...');
-                    console.log('🎯 Board state:', lobbyState.game_state.board);
                     gameBoard.updateBoardWithPieces(lobbyState.game_state.board);
                     
                     // Also update captured pieces if available
@@ -2574,15 +2489,6 @@
                     return;
                 }
                 
-                // Ctrl+R: Refresh board
-                if (event.ctrlKey && event.key === 'r') {
-                    event.preventDefault();
-                    if (gameBoard) {
-                        gameBoard.refreshBoard();
-                        console.log('🔄 Board refreshed via keyboard shortcut');
-                    }
-                }
-                
                 // Ctrl+D: Toggle detailed logging
                 if (event.ctrlKey && event.key === 'd') {
                     event.preventDefault();
@@ -2604,7 +2510,6 @@
             });
             
             console.log('⌨️ Development shortcuts enabled:');
-            console.log('  Ctrl+R: Refresh board');
             console.log('  Ctrl+D: Toggle debug logging');
             console.log('  Ctrl+L: Show lobby state');
             console.log('  Ctrl+Shift+D: Toggle development mode');
@@ -2672,8 +2577,6 @@
             }
         };
 
-
-
         // Close sidebar with Escape key
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
@@ -2694,8 +2597,6 @@
                 }
             }
         });
-
-
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', () => {
@@ -2718,8 +2619,6 @@
         function handleGameOver(gameData) {
             const { winner, game_end_reason } = gameData;
             const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
-            
-            // console.log('🎮 HandleGameOver called:', { gameData, currentPlayer, playerId });
             
             if (!currentPlayer) {
                 console.log('❌ No current player found, exiting handleGameOver');
@@ -3090,17 +2989,7 @@
                     reason = 'Ready to roll';
                 }
             }
-            
-            // console.log('🎲 Spider dice button state:', {
-            //     shouldEnable,
-            //     reason,
-            //     player_turn_count: gameState.player_turn_numbers?.[currentPlayer.color] || 0,
-            //     current_turn: gameState.current_turn,
-            //     player_color: currentPlayer.color,
-            //     spider_dice_min_turn: GAME_CONFIG?.game_rules?.spider_dice_min_turn || 3,
-            //     explanation: `Player has completed ${gameState.player_turn_numbers?.[currentPlayer.color] || 0} turns - needs ${GAME_CONFIG?.game_rules?.spider_dice_min_turn || 3} to use spider dice`
-            // });
-            
+
             // Update button state
             spiderDiceBtn.disabled = !shouldEnable;
             
@@ -3237,10 +3126,6 @@
             document.body.style.overflow = '';
             selectedPromotionPiece = null;
         }
-        
-
-
-
     </script>
 </body>
 </html> 
