@@ -19,10 +19,8 @@
         <div class="bar"></div>
     </button>
     
-    <!-- Chat toggle button -->
-    <button class="chat-toggle" id="chat-toggle" onclick="toggleChat()">
-        <div class="chat-icon">💬</div>
-    </button>
+    <!-- Chat Component -->
+    {% include 'chat_component.html' %}
     
     <!-- Mobile overlay -->
     <div class="mobile-overlay" id="mobile-overlay" onclick="closeSidebar()"></div>
@@ -128,23 +126,6 @@
                         🔄 Refresh Board
                     </button>
                 </div>
-            </div>
-        </div>
-        
-        <!-- Chat Window -->
-        <div class="chat-window" id="chat-window">
-            <div class="chat-header">
-                <div class="chat-title">💬 Chat</div>
-                <button class="close-chat-btn" onclick="closeChat()">×</button>
-            </div>
-            
-            <div class="chat-messages" id="chat-messages">
-                <div class="chat-welcome">Welcome to the lobby! Start chatting with other players.</div>
-            </div>
-            
-            <div class="chat-input-container">
-                <input type="text" id="chat-input" placeholder="Type a message..." maxlength="500" onkeypress="handleChatKeyPress(event)">
-                <button class="send-btn" onclick="sendChatMessage()">Send</button>
             </div>
         </div>
     </div>
@@ -747,162 +728,6 @@
             } else {
                 // Stop timer if game hasn't started or is over
                 stopTurnTimer();
-            }
-        }
-
-        // Chat functionality
-        function toggleChat() {
-            const chatWindow = document.getElementById('chat-window');
-            const chatToggle = document.getElementById('chat-toggle');
-            
-            if (chatWindow.classList.contains('open')) {
-                closeChat();
-            } else {
-                openChat();
-            }
-        }
-
-        function openChat() {
-            const chatWindow = document.getElementById('chat-window');
-            const chatToggle = document.getElementById('chat-toggle');
-            
-            chatWindow.classList.add('open');
-            chatToggle.classList.add('active');
-            
-            // Focus on chat input
-            setTimeout(() => {
-                document.getElementById('chat-input').focus();
-            }, 50);
-        }
-
-        function closeChat() {
-            const chatWindow = document.getElementById('chat-window');
-            const chatToggle = document.getElementById('chat-toggle');
-            
-            chatWindow.classList.remove('open');
-            chatToggle.classList.remove('active');
-        }
-
-        function handleChatKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendChatMessage();
-            }
-        }
-
-        async function sendChatMessage() {
-            const chatInput = document.getElementById('chat-input');
-            const message = chatInput.value.trim();
-            
-            if (!message) return;
-            
-            if (message.length > 500) {
-                alert('Message too long (max 500 characters)');
-                return;
-            }
-            
-            const sendBtn = document.querySelector('.send-btn');
-            sendBtn.disabled = true;
-            sendBtn.textContent = 'Sending...';
-            
-            try {
-                const lobbyId = document.getElementById('lobby-id').textContent;
-                
-                // Send via WebSocket
-                socket.emit('send_chat_message', {
-                    lobby_id: lobbyId,
-                    message: message,
-                    player_id: playerId
-                });
-                
-                // Clear input
-                chatInput.value = '';
-                
-            } catch (error) {
-                console.error('Failed to send chat message:', error);
-                alert('Failed to send message. Please try again.');
-            } finally {
-                sendBtn.disabled = false;
-                sendBtn.textContent = 'Send';
-            }
-        }
-
-        function loadChatMessages() {
-            if (!lobbyState || !lobbyState.game_state || !lobbyState.game_state.chat_messages) {
-                return;
-            }
-            
-            const chatMessages = document.getElementById('chat-messages');
-            // Clear welcome message if it exists
-            const welcomeMessage = chatMessages.querySelector('.chat-welcome');
-            if (welcomeMessage) {
-                welcomeMessage.remove();
-            }
-            
-            // Load all existing messages
-            lobbyState.game_state.chat_messages.forEach(message => {
-                addChatMessage(message, false); // false = don't animate
-            });
-        }
-
-        function addChatMessage(messageData, animate = true) {
-            const chatMessages = document.getElementById('chat-messages');
-            
-            // Remove welcome message if it exists
-            const welcomeMessage = chatMessages.querySelector('.chat-welcome');
-            if (welcomeMessage) {
-                welcomeMessage.remove();
-            }
-            
-            const messageElement = document.createElement('div');
-            messageElement.className = 'chat-message';
-            
-            // Determine if this is our own message
-            const isOwnMessage = messageData.player_id === playerId;
-            const isSpectator = messageData.is_spectator;
-            
-            if (isOwnMessage) {
-                messageElement.classList.add('own');
-            } else if (isSpectator) {
-                messageElement.classList.add('spectator');
-            } else {
-                messageElement.classList.add('other');
-            }
-            
-            if (animate) {
-                messageElement.classList.add('new');
-            }
-            
-            // Format timestamp
-            const timestamp = new Date(messageData.timestamp);
-            const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
-            // Determine player color class
-            let playerColorClass = '';
-            if (isSpectator) {
-                playerColorClass = 'spectator';
-            } else {
-                playerColorClass = messageData.player_color || 'spectator';
-            }
-            
-            messageElement.innerHTML = `
-                <div class="message-header">
-                    <span class="player-name ${playerColorClass}">${messageData.player_name}</span>
-                    ${isSpectator ? '<span class="spectator-badge">(Spectator)</span>' : ''}
-                    <span class="message-timestamp">${timeString}</span>
-                </div>
-                <div class="message-content">${escapeHtml(messageData.message)}</div>
-            `;
-            
-            chatMessages.appendChild(messageElement);
-            
-            // Scroll to bottom
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-            
-            // Remove new animation class after animation completes
-            if (animate) {
-                setTimeout(() => {
-                    messageElement.classList.remove('new');
-                }, 300);
             }
         }
 
