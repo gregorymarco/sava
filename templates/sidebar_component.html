@@ -1,0 +1,360 @@
+<!-- Sidebar Component for Lobby -->
+
+<div class="lobby-sidebar">
+    <div class="lobby-header">
+        <div class="logo">♔♛</div>
+        <h1>Sava</h1>
+        <h2 class="dev-feature">Game Lobby</h2>
+        <div class="lobby-id dev-feature inline" id="lobby-id">{{ lobby_id }}</div>
+    </div>
+    
+    <div class="nav-bar">
+        <a href="/" class="nav-btn">← Back to Home</a>
+        <button class="nav-btn" onclick="openRulesSidebar()">📖 Rules</button>
+    </div>
+    
+    <div class="game-status">
+        <span class="status-indicator status-waiting" id="status-indicator"></span>
+        <span id="status-text">Waiting for players...</span>
+    </div>
+
+    <div class="turn-timer" id="turn-timer" style="display: none;">
+        <h4>Turn Timer</h4>
+        <div class="timer-display">
+            <div class="timer-section red">
+                <div class="timer-label">Red Player</div>
+                <div class="timer-value" id="red-timer">--:--</div>
+            </div>
+            <div class="timer-section blue">
+                <div class="timer-label">Blue Player</div>
+                <div class="timer-value" id="blue-timer">--:--</div>
+            </div>
+            <div class="current-turn-timer">
+                <div class="timer-label">Current Turn</div>
+                <div class="timer-value" id="current-turn-timer">00:00</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="player-section">
+        <h3>Players (0/2)</h3>
+        <ul class="player-list" id="player-list">
+            <li class="player-item">Waiting for players to join...</li>
+        </ul>
+    </div>
+
+    <div class="player-section">
+        <h3>Spectators</h3>
+        <ul class="player-list" id="spectator-list">
+            <li class="player-item">No spectators</li>
+        </ul>
+    </div>
+
+    <div class="share-link">
+        <h4>Share this link:</h4>
+        <input type="text" id="share-url" readonly>
+        <button class="copy-btn" onclick="copyShareLink()">Copy Link</button>
+    </div>
+</div>
+
+<script>
+    // Sidebar functionality
+
+    // Copy share link
+    function copyShareLink() {
+        const shareUrl = document.getElementById('share-url');
+        shareUrl.select();
+        document.execCommand('copy');
+        
+        const copyBtn = document.querySelector('.copy-btn');
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => {
+            copyBtn.textContent = originalText;
+        }, 2000);
+    }
+
+    // Sidebar toggle functions
+    function toggleSidebar() {
+        const sidebar = document.querySelector('.lobby-sidebar');
+        const hamburger = document.getElementById('hamburger-menu');
+        const overlay = document.getElementById('mobile-overlay');
+        const isMobile = window.innerWidth <= 768;
+        
+        console.log('🍔 Toggle sidebar clicked, isMobile:', isMobile);
+        console.log('🍔 Sidebar classes:', sidebar.classList.toString());
+        
+        if (isMobile) {
+            // On mobile, toggle between open/closed overlay
+            if (sidebar.classList.contains('open')) {
+                console.log('📱 Mobile: closing sidebar');
+                closeSidebar();
+            } else {
+                console.log('📱 Mobile: opening sidebar');
+                openSidebar();
+            }
+        } else {
+            // On desktop, toggle between visible/hidden in grid
+            if (sidebar.classList.contains('hamburger-hidden')) {
+                console.log('🖥️ Desktop: showing sidebar');
+                openSidebar();
+            } else {
+                console.log('🖥️ Desktop: hiding sidebar');
+                closeSidebar();
+            }
+        }
+    }
+
+    function openSidebar() {
+        const sidebar = document.querySelector('.lobby-sidebar');
+        const hamburger = document.getElementById('hamburger-menu');
+        const overlay = document.getElementById('mobile-overlay');
+        const lobbyContent = document.querySelector('.lobby-content');
+        const isMobile = window.innerWidth <= 768;
+        
+        console.log('🔓 Opening sidebar, isMobile:', isMobile);
+        
+        if (isMobile) {
+            // Mobile behavior: overlay sidebar
+            sidebar.classList.add('open');
+            overlay.classList.add('open');
+            document.body.style.overflow = 'hidden';
+            console.log('📱 Mobile: sidebar opened as overlay');
+        } else {
+            // Desktop behavior: show sidebar in grid layout
+            sidebar.classList.remove('hamburger-hidden');
+            lobbyContent.classList.remove('sidebar-collapsed');
+            console.log('🖥️ Desktop: sidebar shown in grid');
+            
+            // Trigger board redraw after a short delay to allow CSS transition
+            setTimeout(() => {
+                if (gameBoard) {
+                    gameBoard.handleSidebarToggle(false); // false = expanded
+                }
+            }, 300);
+        }
+        
+        hamburger.classList.add('active');
+        console.log('🍔 Hamburger active, sidebar classes:', sidebar.classList.toString());
+    }
+
+    function closeSidebar() {
+        const sidebar = document.querySelector('.lobby-sidebar');
+        const hamburger = document.getElementById('hamburger-menu');
+        const overlay = document.getElementById('mobile-overlay');
+        const lobbyContent = document.querySelector('.lobby-content');
+        const isMobile = window.innerWidth <= 768;
+        
+        console.log('🔒 Closing sidebar, isMobile:', isMobile);
+        
+        if (isMobile) {
+            // Mobile behavior: hide overlay sidebar
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            document.body.style.overflow = '';
+            console.log('📱 Mobile: sidebar closed as overlay');
+        } else {
+            // Desktop behavior: hide sidebar and expand game board
+            sidebar.classList.add('hamburger-hidden');
+            lobbyContent.classList.add('sidebar-collapsed');
+            console.log('🖥️ Desktop: sidebar hidden, grid collapsed');
+            
+            // Trigger board redraw after a short delay to allow CSS transition
+            setTimeout(() => {
+                if (gameBoard) {
+                    gameBoard.handleSidebarToggle(true); // true = collapsed
+                }
+            }, 300);
+        }
+        
+        hamburger.classList.remove('active');
+        console.log('🍔 Hamburger inactive, sidebar classes:', sidebar.classList.toString());
+    }
+
+    // Check if device is mobile and set initial sidebar state
+    function initializeMobileLayout() {
+        const isMobile = window.innerWidth <= 768;
+        const sidebar = document.querySelector('.lobby-sidebar');
+        const hamburger = document.getElementById('hamburger-menu');
+        const lobbyContent = document.querySelector('.lobby-content');
+        const overlay = document.getElementById('mobile-overlay');
+        
+        if (isMobile) {
+            // On mobile, sidebar starts closed (overlay mode)
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            hamburger.classList.remove('active');
+            document.body.style.overflow = '';
+            console.log('📱 Mobile layout detected - sidebar collapsed');
+        } else {
+            // On desktop, sidebar starts visible in grid layout
+            sidebar.classList.remove('hamburger-hidden');
+            sidebar.classList.remove('open'); // Remove mobile overlay class
+            lobbyContent.classList.remove('sidebar-collapsed');
+            overlay.classList.remove('open');
+            hamburger.classList.remove('active');
+            console.log('🖥️ Desktop layout detected - sidebar visible in grid');
+        }
+    }
+
+    // Handle window resize for responsive behavior
+    function handleResize() {
+        const isMobile = window.innerWidth <= 768;
+        const sidebar = document.querySelector('.lobby-sidebar');
+        const hamburger = document.getElementById('hamburger-menu');
+        const lobbyContent = document.querySelector('.lobby-content');
+        const overlay = document.getElementById('mobile-overlay');
+        
+        // Clear all classes and reset
+        sidebar.classList.remove('open', 'hamburger-hidden');
+        lobbyContent.classList.remove('sidebar-collapsed');
+        overlay.classList.remove('open');
+        document.body.style.overflow = '';
+        
+        if (isMobile) {
+            // Mobile: start with sidebar closed
+            hamburger.classList.remove('active');
+            console.log('📱 Switched to mobile layout');
+        } else {
+            // Desktop: start with sidebar visible in grid
+            hamburger.classList.remove('active');
+            // console.log('🖥️ Switched to desktop layout');
+        }
+        
+        // If we have a game board, trigger a redraw to handle the new layout
+        if (gameBoard && !isMobile) {
+            setTimeout(() => {
+                gameBoard.handleSidebarToggle(false); // false = expanded (default desktop state)
+            }, 100);
+        }
+    }
+
+    // Timer Variables and Functions
+    let turnTimerInterval = null;
+    let currentTurnStartTime = null;
+    let timeoutTriggered = false;
+
+    function getTimerConfig() {
+        // Get timer limit from game config, default to 600 seconds (10 minutes)
+        return GameLogic.getConfig('game_rules.turn_time_limit_seconds', 600);
+    }
+
+    function formatTime(seconds) {
+        if (seconds <= 0) return "00:00";
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function updateTimerDisplay() {
+        const gameState = lobbyState?.game_state;
+        if (!gameState || !gameState.game_started) {
+            document.getElementById('turn-timer').style.display = 'none';
+            return;
+        }
+
+        // Show timer
+        document.getElementById('turn-timer').style.display = 'block';
+
+        // Update player timers
+        const redTime = gameState.player_time_remaining?.red || 0;
+        const blueTime = gameState.player_time_remaining?.blue || 0;
+        
+        const redTimerEl = document.getElementById('red-timer');
+        const blueTimerEl = document.getElementById('blue-timer');
+        
+        redTimerEl.textContent = formatTime(redTime);
+        blueTimerEl.textContent = formatTime(blueTime);
+
+        // Timer sections already have the red/blue classes in HTML
+
+        // Add warning/danger classes based on configured timer limit
+        const timerLimit = getTimerConfig();
+        const warningThreshold = Math.max(120, timerLimit * 0.2); // 20% of time or 2 minutes, whichever is greater
+        const dangerThreshold = Math.max(60, timerLimit * 0.1);   // 10% of time or 1 minute, whichever is greater
+        
+        redTimerEl.className = 'timer-value';
+        blueTimerEl.className = 'timer-value';
+        
+        if (redTime <= dangerThreshold) redTimerEl.className += ' danger';
+        else if (redTime <= warningThreshold) redTimerEl.className += ' warning';
+        
+        if (blueTime <= dangerThreshold) blueTimerEl.className += ' danger';
+        else if (blueTime <= warningThreshold) blueTimerEl.className += ' warning';
+
+        // Update current turn timer
+        updateCurrentTurnTimer(gameState);
+    }
+
+    function updateCurrentTurnTimer(gameState) {
+        if (!gameState.turn_start_time) return;
+        
+        const currentTime = Date.now() / 1000;
+        const turnStartTime = gameState.turn_start_time;
+        const elapsedThisTurn = currentTime - turnStartTime;
+        
+        const currentTurnTimerEl = document.getElementById('current-turn-timer');
+        currentTurnTimerEl.textContent = formatTime(elapsedThisTurn);
+        
+        // Check for timeout - if elapsed time this turn would exhaust remaining time
+        const currentPlayer = gameState.current_turn;
+        const remainingTimeAtTurnStart = gameState.player_time_remaining?.[currentPlayer] || 0;
+        
+        // Player times out if they've used up all their remaining time
+        if (remainingTimeAtTurnStart > 0 && elapsedThisTurn >= remainingTimeAtTurnStart && !timeoutTriggered) {
+            console.log(`⏰ TIMEOUT DETECTED: ${currentPlayer} used ${elapsedThisTurn.toFixed(1)}s but only had ${remainingTimeAtTurnStart.toFixed(1)}s remaining`);
+            timeoutTriggered = true;
+            handlePlayerTimeout();
+        }
+    }
+
+    function startTurnTimer() {
+        // Clear existing timer
+        if (turnTimerInterval) {
+            clearInterval(turnTimerInterval);
+        }
+        
+        // Reset timeout flag for new turn
+        timeoutTriggered = false;
+        
+        // Start new timer that updates every second
+        turnTimerInterval = setInterval(() => {
+            if (lobbyState?.game_state?.game_started && !lobbyState?.game_state?.game_over) {
+                updateCurrentTurnTimer(lobbyState.game_state);
+            }
+        }, 1000);
+    }
+
+    function stopTurnTimer() {
+        if (turnTimerInterval) {
+            clearInterval(turnTimerInterval);
+            turnTimerInterval = null;
+        }
+    }
+
+    function handlePlayerTimeout() {
+        const gameState = lobbyState?.game_state;
+        if (!gameState || gameState.game_over) {
+            console.log('⏰ Timeout ignored: game not active or already over');
+            return;
+        }
+        
+        const currentPlayer = lobbyState?.players?.find(p => p.id === playerId);
+        if (!currentPlayer || currentPlayer.color !== gameState.current_turn) {
+            console.log('⏰ Timeout ignored: not our turn');
+            return; // Not our turn, so we can't time out
+        }
+        
+        console.log('⏰ Player timed out, sending timeout event to server');
+        
+        // Send timeout event to server
+        const lobbyId = document.getElementById('lobby-id').textContent;
+        socket.emit('player_timeout', {
+            lobby_id: lobbyId,
+            player_id: playerId
+        });
+        
+        // Stop the timer
+        stopTurnTimer();
+    }
+</script>

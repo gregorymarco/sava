@@ -134,20 +134,39 @@ body {
         height: 100vh;
     }
     
-    /* Make game board expand to fill the entire available space when sidebar is collapsed */
+    /* Game board styling when sidebar is collapsed - flexbox handles sizing */
     .lobby-content.sidebar-collapsed .game-board {
         width: 100%;
-        height: 90vh;
         max-width: none;
         margin: 0;
-        padding: 4vw;
-        min-height: 70vh;
+        padding: 4vw; /* Back to normal padding */
         transition: all 0.3s ease;
     }
     
     /* Ensure smooth transition for the container as well */
     .lobby-content.sidebar-collapsed .game-board-container {
         transition: all 0.3s ease;
+    }
+    
+    /* Use flexbox to separate game board and captured pieces when sidebar collapsed */
+    .lobby-content.sidebar-collapsed .unified-game-area {
+        display: flex;
+        flex-direction: column;
+        height: 90vh;
+    }
+    
+    /* Game board takes most of the space when sidebar collapsed */
+    .lobby-content.sidebar-collapsed .game-board {
+        flex: 1; /* Take all available space after captured pieces */
+        height: auto; /* Let flexbox determine height */
+        min-height: 0; /* Allow flexbox to shrink if needed */
+    }
+    
+    /* Captured pieces area gets fixed space when sidebar collapsed */
+    .lobby-content.sidebar-collapsed .captured-pieces-board {
+        flex: 0 0 auto; /* Don't grow/shrink, use content size */
+        min-height: 10vh;
+        padding: 0.5vh 0 1.5vh 0;
     }
     
     /* Hide overlay on desktop by default */
