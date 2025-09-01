@@ -28,7 +28,6 @@ http://localhost:5000
 
 Most important:
 - UI facelift with appropriate assets
-- Turn timers/chess clock
 
 Next steps:
 - Matchmaking
