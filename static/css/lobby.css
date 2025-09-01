@@ -130,8 +130,8 @@ body {
     .lobby-content.sidebar-collapsed .game-board-container {
         width: 100%;
         max-width: none;
-        padding: 1rem;
-        min-height: 100vh;
+        padding: 0.5rem;
+        height: 100vh;
     }
     
     /* Make game board expand to fill the entire available space when sidebar is collapsed */
@@ -140,8 +140,8 @@ body {
         height: 90vh;
         max-width: none;
         margin: 0;
-        padding: 40px;
-        min-height: 700px;
+        padding: 4vw;
+        min-height: 70vh;
         transition: all 0.3s ease;
     }
     
@@ -462,33 +462,114 @@ body {
     text-align: center;
     position: relative;
     width: 100%;
+    height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
     transition: all 0.3s ease;
 }
 
 .game-board {
     position: relative;
     width: 100%;
-    height: 800px;
-    margin: 0 auto;
+    height: 82vh;
+    margin: 0;
     background: rgba(255, 255, 255, 0.95);
-    border-radius: 15px;
-    padding: 60px;
+    border-radius: 0;
+    padding: 3vw;
     transition: all 0.3s ease;
-    min-height: 600px;
-    max-height: 1000px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(10px);
+    min-height: 60vh;
+    max-width: none;
 }
 
 .game-board-container {
     transition: all 0.3s ease;
 }
 
+/* Unified game area - seamless board and captured pieces */
+.unified-game-area {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    border-radius: 15px;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+/* Captured pieces in board area - seamless with board */
+.captured-pieces-board {
+    display: flex;
+    justify-content: space-between;
+    gap: 2vw;
+    margin: 0;
+    padding: 1vh 0 2vh 0;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.95), rgba(248, 249, 250, 0.95));
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    position: relative;
+    min-height: 10vh;
+}
+
+.captured-pieces-board::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(102, 126, 234, 0.3), transparent);
+}
+
+.captured-section {
+    flex: 1;
+    text-align: center;
+    padding: 0 1vw;
+}
+
+/* Center controls between captured pieces */
+.center-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5vh;
+    padding: 0 2vw;
+    min-width: fit-content;
+}
+
+.dice-help-text {
+    font-size: clamp(0.7rem, 1.2vw, 0.9rem);
+    color: #666;
+    text-align: center;
+    margin-top: 0.25vh;
+}
+
+.captured-section h4 {
+    margin: 0 0 1vh 0;
+    font-size: clamp(0.9rem, 2vw, 1.2rem);
+    color: #333;
+    font-weight: 600;
+}
+
+.captured-pieces-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5vw;
+    min-height: 5vh;
+    align-items: center;
+}
+
+.captured-pieces-list:empty::after {
+    content: "No pieces captured yet";
+    color: #999;
+    font-style: italic;
+    font-size: clamp(0.8rem, 1.5vw, 1rem);
+}
+
+/* Legacy captured pieces styles for sidebar (if needed elsewhere) */
 .captured-pieces {
     background: rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(10px);
@@ -505,21 +586,22 @@ body {
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-.captured-pieces-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-}
-
 .captured-piece {
-    width: 25px;
-    height: 25px;
+    width: clamp(25px, 3vw, 40px);
+    height: clamp(25px, 3vw, 40px);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem;
-    border: 2px solid #ddd;
+    font-size: clamp(0.9rem, 2vw, 1.3rem);
+    border: clamp(1px, 0.2vw, 3px) solid #ddd;
+    transition: all 0.2s ease;
+    box-shadow: 0 0.2vw 0.4vw rgba(0, 0, 0, 0.1);
+}
+
+.captured-piece:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0.4vw 0.8vw rgba(0, 0, 0, 0.15);
 }
 
 .captured-piece.red {
@@ -536,8 +618,9 @@ body {
 
 @media (max-width: 1200px) {
     .game-board {
-        height: 700px;
-        padding: 50px;
+        height: 77vh;
+        padding: 2.5vw;
+        min-height: 55vh;
     }
 }
 
@@ -547,15 +630,45 @@ body {
     }
     
     .game-board {
-        height: 600px;
-        padding: 40px;
+        height: 72vh;
+        padding: 2vw;
+        min-height: 50vh;
+    }
+    
+    .captured-pieces-board {
+        flex-direction: column;
+        gap: 1vh;
+        margin: 0;
+        padding: 1vh 0 2vh 0;
+        min-height: 12vh;
+    }
+    
+    .center-controls {
+        order: -1; /* Move to top on mobile */
+        padding: 1vh 0;
+        width: 100%;
+    }
+    
+    .unified-game-area {
+        border-radius: 12px;
+    }
+    
+    .captured-section h4 {
+        font-size: clamp(0.8rem, 3vw, 1rem);
+        margin-bottom: 1vh;
     }
 }
 
 @media (max-width: 480px) {
     .game-board {
-        height: 550px;
-        padding: 30px;
+        height: 67vh;
+        padding: 3vw;
+        min-height: 45vh;
+    }
+    
+    .captured-pieces-board {
+        padding: 1vh 0 2vh 0;
+        min-height: 15vh;
     }
 }
 
@@ -662,21 +775,6 @@ body {
     background: #333;
     z-index: 5;
 }
-
-.strand.ring {
-    border: 2px solid #333;
-    border-radius: 50%;
-    background: transparent;
-    opacity: 0.8;
-    transition: all 0.3s ease;
-}
-
-.strand.ring:hover {
-    opacity: 1;
-    border-color: #667eea;
-    box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
-}
-
 
 .btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

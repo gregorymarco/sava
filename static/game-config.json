@@ -46,7 +46,7 @@
     },
     "board_scaling": {
         "center_offset": 35,
-        "max_radius_multiplier": 0.35,
+        "max_radius_multiplier": 0.40,
         "ring_radius_ratios": [0.33, 0.67, 1.0],
         "node_size": 25
     },
