@@ -70,6 +70,7 @@ GAME_CONFIG = load_game_config()
 MAX_PLAYERS = GAME_CONFIG["game_rules"]["max_players"]
 AUTO_START_THRESHOLD = GAME_CONFIG["game_rules"]["auto_start_threshold"]
 SPIDER_DICE_MIN_TURN = GAME_CONFIG["game_rules"]["spider_dice_min_turn"]
+TURN_TIME_LIMIT = GAME_CONFIG["game_rules"]["turn_time_limit_seconds"]
 RESURRECTION_ZONES = GAME_CONFIG["resurrection_zones"]
 
 # Board connectivity - defines which nodes are connected
@@ -182,7 +183,7 @@ def would_move_put_matron_in_check(from_node, to_node, board_state, current_colo
 
 def get_legal_moves_for_orc(node_id, board_state, current_color, spider_control=False):
     """Calculate legal moves for an Orc piece."""
-    print(f"DEBUG: Orc legal moves - node_id: {node_id}, spider_control: {spider_control}")
+    # print(f"DEBUG: Orc legal moves - node_id: {node_id}, spider_control: {spider_control}")
     legal_moves = set()
     neighbors = get_neighboring_nodes(node_id)
     
@@ -190,7 +191,7 @@ def get_legal_moves_for_orc(node_id, board_state, current_color, spider_control=
         # Check if this is a capture move
         if neighbor_id in board_state:
             piece_name = board_state[neighbor_id]
-            print(f"DEBUG: Orc considering capture - neighbor: {neighbor_id}, piece: {piece_name}")
+            # print(f"DEBUG: Orc considering capture - neighbor: {neighbor_id}, piece: {piece_name}")
             if spider_control:
                 # In spider control mode, can capture any piece
                 print(f"DEBUG: Spider control - adding capture move {neighbor_id}")
@@ -199,8 +200,6 @@ def get_legal_moves_for_orc(node_id, board_state, current_color, spider_control=
                 # Regular mode: can only capture enemy pieces
                 print(f"DEBUG: Regular mode - adding enemy capture {neighbor_id}")
                 legal_moves.add(neighbor_id)
-            else:
-                print(f"DEBUG: Skipping friendly piece {neighbor_id}")
             # Skip if it's own piece and not in spider control mode
         else:
             # This is a regular move - check if we're moving away from enemies
@@ -213,7 +212,7 @@ def get_legal_moves_for_orc(node_id, board_state, current_color, spider_control=
             if not current_has_enemies or new_has_enemies:
                 legal_moves.add(neighbor_id)
     
-    print(f"DEBUG: Orc final legal moves: {list(legal_moves)}")
+    #print(f"DEBUG: Orc final legal moves: {list(legal_moves)}")
     return list(legal_moves)
 
 def get_legal_moves_for_priestess(node_id, board_state, current_color, spider_control=False):
@@ -447,6 +446,9 @@ class Lobby:
         self.players = []
         self.spectators = []
         self.created_at = datetime.now()
+        # Turn timer configuration (in seconds)
+        self.turn_time_limit = TURN_TIME_LIMIT
+        
         self.game_state = {
             'board': {},
             'current_turn': 'red',
@@ -461,6 +463,11 @@ class Lobby:
             'red': 0,  # Red player's turn counter
             'blue': 0   # Blue player's turn counter
         },
+        'player_time_remaining': {
+            'red': self.turn_time_limit,  # Time remaining for red player (seconds)
+            'blue': self.turn_time_limit   # Time remaining for blue player (seconds)
+        },
+        'turn_start_time': None,  # Timestamp when current turn started
         'chat_messages': [],  # Chat messages for this lobby
         'promotion_mode': False,  # True when waiting for piece selection
         'promotion_player': None,  # Player who can promote
@@ -521,6 +528,89 @@ class Lobby:
             'can_start': len(self.players) == 2
         }
 
+    def _update_turn_timer(self, player_color):
+        """Update the turn timer for the current player."""
+        if not self.game_state['game_started'] or not self.game_state['turn_start_time']:
+            return
+        
+        # Calculate elapsed time since turn started
+        current_time = datetime.now().timestamp()
+        elapsed_time = current_time - self.game_state['turn_start_time']
+        
+        # Subtract elapsed time from player's remaining time
+        self.game_state['player_time_remaining'][player_color] -= elapsed_time
+        
+        # Ensure time doesn't go below 0
+        if self.game_state['player_time_remaining'][player_color] < 0:
+            self.game_state['player_time_remaining'][player_color] = 0
+        
+        print(f"⏰ Timer update for {player_color}: {elapsed_time:.1f}s elapsed, {self.game_state['player_time_remaining'][player_color]:.1f}s remaining")
+
+    def _start_next_player_timer(self, next_player_color):
+        """Start the timer for the next player's turn."""
+        self.game_state['turn_start_time'] = datetime.now().timestamp()
+        print(f"⏰ Timer started for {next_player_color} player")
+
+    def _check_time_expired(self, player_color):
+        """Check if a player's time has expired."""
+        # First check if time remaining is already 0
+        if self.game_state['player_time_remaining'][player_color] <= 0:
+            return True
+        
+        # If not, check if elapsed time this turn would exhaust remaining time
+        if not self.game_state.get('turn_start_time'):
+            return False
+        
+        current_time = datetime.now().timestamp()
+        elapsed_this_turn = current_time - self.game_state['turn_start_time']
+        remaining_time = self.game_state['player_time_remaining'][player_color]
+        
+        # Player has timed out if elapsed time >= remaining time
+        has_timed_out = elapsed_this_turn >= remaining_time
+        
+        if has_timed_out:
+            print(f"⏰ Server timeout validation: {player_color} used {elapsed_this_turn:.1f}s but only had {remaining_time:.1f}s remaining")
+        
+        return has_timed_out
+
+    def handle_player_timeout(self, player_color):
+        """Handle when a player runs out of time."""
+        if not self.game_state['game_started'] or self.game_state.get('game_over'):
+            return False, "Game not active"
+        
+        # Verify the player has actually timed out
+        if not self._check_time_expired(player_color):
+            return False, "Player has not timed out"
+        
+        # Game over - the other player wins
+        winner_color = 'blue' if player_color == 'red' else 'red'
+        self.game_state['game_over'] = True
+        self.game_state['winner'] = winner_color
+        self.game_state['game_end_reason'] = 'timeout'
+        self.game_state['timeout_player'] = player_color
+        
+        print(f"⏰ TIMEOUT! {player_color.upper()} player ran out of time!")
+        print(f"🏆 Winner: {winner_color} (opponent timed out)")
+        print(f"💀 Loser: {player_color} (timed out)")
+        print(f"🎮 Game ended due to timeout")
+        
+        # Notify all players about the timeout
+        notify_lobby_update(self.lobby_id, 'player_timeout', {
+            'timeout_player': player_color,
+            'winner': winner_color,
+            'game_end_reason': 'timeout'
+        })
+        
+        # Send game over event
+        notify_lobby_update(self.lobby_id, 'game_over', {
+            'winner': winner_color,
+            'game_end_reason': 'timeout',
+            'timeout_player': player_color,
+            'final_board': self.game_state['board']
+        })
+        
+        return True, self.game_state
+
     def setup_game_board(self, piece_mapping):
         """
         Set up the initial game board with pieces.
@@ -539,6 +629,9 @@ class Lobby:
         self.game_state['current_turn'] = 'red'
         self.game_state['last_move'] = None
         self.game_state['player_turn_numbers'] = {'red': 0, 'blue': 0}  # Initialize player turn counters
+        
+        # Start the turn timer for the first player (red)
+        self.game_state['turn_start_time'] = datetime.now().timestamp()
         
         # Update the board state to reflect piece positions
         self.game_state['board'] = {}
@@ -623,9 +716,9 @@ class Lobby:
         
         # Verify the move is legal
         legal_moves = self.get_legal_moves_for_piece(from_node)
-        print(f"DEBUG: Move validation - from_node: {from_node}, to_node: {to_node}")
-        print(f"DEBUG: Legal moves: {legal_moves}")
-        print(f"DEBUG: to_node in legal_moves: {to_node in legal_moves}")
+        # print(f"DEBUG: Move validation - from_node: {from_node}, to_node: {to_node}")
+        # print(f"DEBUG: Legal moves: {legal_moves}")
+        # print(f"DEBUG: to_node in legal_moves: {to_node in legal_moves}")
         if to_node not in legal_moves:
             return False, "Illegal move"
         
@@ -654,7 +747,7 @@ class Lobby:
                     self.game_state['captured_pieces'][player['color']].append(captured_piece)
                     # Remove the captured piece from the board
                     del self.game_state['board'][first_node]
-                    print(f"Piece {captured_piece} captured on first node by {player['color']} player")
+                    # print(f"Piece {captured_piece} captured on first node by {player['color']} player")
                 
                 # Check for captures on second node
                 if second_node in self.game_state['board']:
@@ -663,7 +756,7 @@ class Lobby:
                     self.game_state['captured_pieces'][player['color']].append(captured_piece)
                     # Remove the captured piece from the board
                     del self.game_state['board'][second_node]
-                    print(f"Piece {captured_piece} captured on second node by {player['color']} player")
+                    # print(f"Piece {captured_piece} captured on second node by {player['color']} player")
                 
                 # Remove piece from source and place at final destination
                 del self.game_state['board'][from_node]
@@ -680,9 +773,9 @@ class Lobby:
                     'move_type': 'weaponmaster_two_node'
                 }
                 
-                print(f"Weaponmaster move completed. Captured pieces: {captured_pieces}")
-                print(f"Total captured pieces for {player['color']}: {self.game_state['captured_pieces'][player['color']]}")
-                print(f"Board state after weaponmaster move: {self.game_state['board']}")
+                # print(f"Weaponmaster move completed. Captured pieces: {captured_pieces}")
+                # print(f"Total captured pieces for {player['color']}: {self.game_state['captured_pieces'][player['color']]}")
+                # print(f"Board state after weaponmaster move: {self.game_state['board']}")
             else:
                 return False, "Invalid weaponmaster move format"
         elif 'wizard' in piece_name and '->' in to_node:
@@ -704,7 +797,7 @@ class Lobby:
                     self.game_state['captured_pieces'][player['color']].append(captured_piece)
                     # Remove the captured piece from the board
                     del self.game_state['board'][third_node]
-                    print(f"Piece {captured_piece} captured on final node by {player['color']} player")
+                    # print(f"Piece {captured_piece} captured on final node by {player['color']} player")
                 
                 # Remove piece from source and place at final destination
                 del self.game_state['board'][from_node]
@@ -721,9 +814,9 @@ class Lobby:
                     'move_type': 'wizard_three_node'
                 }
                 
-                print(f"Wizard three-node move completed. Captured pieces: {captured_pieces}")
-                print(f"Total captured pieces for {player['color']}: {self.game_state['captured_pieces'][player['color']]}")
-                print(f"Board state after wizard move: {self.game_state['board']}")
+                # print(f"Wizard three-node move completed. Captured pieces: {captured_pieces}")
+                # print(f"Total captured pieces for {player['color']}: {self.game_state['captured_pieces'][player['color']]}")
+                # print(f"Board state after wizard move: {self.game_state['board']}")
             else:
                 return False, "Invalid wizard move format"
         else:
@@ -739,7 +832,7 @@ class Lobby:
                 self.game_state['captured_pieces'][player['color']].append(captured_piece)
                 # Remove the captured piece from the board
                 del self.game_state['board'][to_node]
-                print(f"Piece {captured_piece} captured by {player['color']} player")
+                # print(f"Piece {captured_piece} captured by {player['color']} player")
                 captured_pieces = [captured_piece]
             
             # Place piece at destination
@@ -789,11 +882,18 @@ class Lobby:
                 
                 return True, self.game_state
         
+        # Update timer for the current player before switching turns
+        self._update_turn_timer(player['color'])
+        
         # Increment the current player's turn counter
         self.game_state['player_turn_numbers'][player['color']] += 1
         
         # Switch turns
-        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        next_player_color = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        self.game_state['current_turn'] = next_player_color
+        
+        # Start timer for the next player
+        self._start_next_player_timer(next_player_color)
         
         # Check if the next player is in check
         next_player_color = self.game_state['current_turn']
@@ -902,8 +1002,11 @@ class Lobby:
             self.game_state['spider_control_player'] = player['color']
             print(f"🕷️🕷️ DOUBLE SPIDERS! {player['color']} player can control an enemy piece!")
         else:
-            # Switch turns for normal results
-            self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+            # Update timer for current player and switch turns for normal results
+            self._update_turn_timer(player['color'])
+            next_player_color = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+            self.game_state['current_turn'] = next_player_color
+            self._start_next_player_timer(next_player_color)
         
         print(f"🎲 {player['color']} player rolled spider dice: {die1} ({'🕷️' if die1_spider else '🔪'}) and {die2} ({'🕷️' if die2_spider else '🔪'})")
         if both_spiders:
@@ -967,13 +1070,19 @@ class Lobby:
         if self.game_state.get('sacrifice_mode', False):
             self.game_state['sacrifice_mode'] = False
             self.game_state['sacrifice_player'] = None
-            # Switch turns after sacrifice - player's turn ends immediately
-            self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+            # Update timer and switch turns after sacrifice - player's turn ends immediately
+            self._update_turn_timer(player['color'])
+            next_player_color = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+            self.game_state['current_turn'] = next_player_color
+            self._start_next_player_timer(next_player_color)
         else:
-            # Increment the current player's turn counter for normal sacrifice
+            # Update timer and increment the current player's turn counter for normal sacrifice
+            self._update_turn_timer(player['color'])
             self.game_state['player_turn_numbers'][player['color']] += 1
             # Switch turns for normal sacrifice
-            self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+            next_player_color = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+            self.game_state['current_turn'] = next_player_color
+            self._start_next_player_timer(next_player_color)
 
         # Notify all players about the sacrifice
         notify_lobby_update(self.lobby_id, 'piece_sacrificed', self.game_state)
@@ -1117,11 +1226,14 @@ class Lobby:
         self.game_state['controlled_piece_name'] = None
         self.game_state['controlled_piece_original_color'] = None
         
-        # Increment the current player's turn counter
+        # Update timer and increment the current player's turn counter
+        self._update_turn_timer(player['color'])
         self.game_state['player_turn_numbers'][player['color']] += 1
         
         # Switch turns after controlled move
-        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        next_player_color = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        self.game_state['current_turn'] = next_player_color
+        self._start_next_player_timer(next_player_color)
         
         print(f"🕷️ Controlled move completed: {from_node} -> {final_position}")
         print(f"Captured pieces: {captured_pieces}")
@@ -1181,11 +1293,14 @@ class Lobby:
         self.game_state['promotion_node'] = None
         self.game_state['promotion_orc'] = None
         
-        # Increment the current player's turn counter
+        # Update timer and increment the current player's turn counter
+        self._update_turn_timer(player['color'])
         self.game_state['player_turn_numbers'][player['color']] += 1
         
         # Switch turns after promotion
-        self.game_state['current_turn'] = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        next_player_color = 'blue' if self.game_state['current_turn'] == 'red' else 'red'
+        self.game_state['current_turn'] = next_player_color
+        self._start_next_player_timer(next_player_color)
         
         print(f"🔄 Orc promoted: {self.game_state.get('promotion_orc', 'unknown')} -> {selected_piece} at {promotion_node}")
         
@@ -1662,6 +1777,34 @@ def handle_promote_orc(data):
     else:
         emit('promotion_error', {'error': 'Lobby not found'})
 
+@socketio.on('player_timeout')
+def handle_player_timeout(data):
+    lobby_id = data.get('lobby_id')
+    player_id = data.get('player_id')
+    
+    print(f'WebSocket: Player {player_id} timed out in lobby {lobby_id}')
+    
+    if lobby_id in lobbies:
+        lobby = lobbies[lobby_id]
+        
+        # Find the player
+        player = next((p for p in lobby.players if p['id'] == player_id), None)
+        if not player:
+            emit('timeout_error', {'error': 'Player not found'})
+            return
+        
+        # Handle the timeout
+        success, result = lobby.handle_player_timeout(player['color'])
+        
+        if success:
+            # Timeout notification already sent in handle_player_timeout
+            pass
+        else:
+            # Send error back to the player
+            emit('timeout_error', {'error': result})
+    else:
+        emit('timeout_error', {'error': 'Lobby not found'})
+
 @app.route('/')
 def landing():
     return render_template('landing.html')
@@ -1942,6 +2085,7 @@ def get_game_config():
     config = {
         'max_players': MAX_PLAYERS,
         'auto_start_threshold': AUTO_START_THRESHOLD,
+        'turn_time_limit_seconds': TURN_TIME_LIMIT,
         'board_connections': BOARD_CONNECTIONS
     }
     return jsonify(config)
@@ -2031,6 +2175,37 @@ def promote_orc_api(lobby_id):
     
     # Promote the orc
     success, result = lobby.promote_orc(player_id, selected_piece)
+    
+    if success:
+        return jsonify({
+            'success': True,
+            'game_state': result,
+            'lobby_info': lobby.get_lobby_info()
+        })
+    else:
+        return jsonify({'error': result}), 400
+
+@app.route('/api/lobby/<lobby_id>/timeout', methods=['POST'])
+def player_timeout_api(lobby_id):
+    """Handle player timeout."""
+    if lobby_id not in lobbies:
+        return jsonify({'error': 'Lobby not found'}), 404
+    
+    data = request.get_json()
+    player_id = data.get('player_id')
+    
+    if not player_id:
+        return jsonify({'error': 'Player ID required'}), 400
+    
+    lobby = lobbies[lobby_id]
+    
+    # Verify player is in this lobby
+    player = next((p for p in lobby.players if p['id'] == player_id), None)
+    if not player:
+        return jsonify({'error': 'Player not in lobby'}), 403
+    
+    # Handle the timeout
+    success, result = lobby.handle_player_timeout(player['color'])
     
     if success:
         return jsonify({
