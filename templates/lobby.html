@@ -734,6 +734,9 @@
                 this.lastWidth = window.innerWidth;
                 this.lastHeight = window.innerHeight;
                 
+                // Mobile detection
+                this.isMobile = this.detectMobile();
+                
                 // Check if GAME_CONFIG is loaded before initializing board
                 if (GAME_CONFIG) {
                     console.log('🎯 GAME_CONFIG available, waiting for container dimensions');
@@ -769,8 +772,26 @@
                 }
             }
 
+            detectMobile() {
+                // Check for mobile device based on multiple criteria
+                const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+                const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+                
+                // Check for touch capability
+                const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                
+                // Check screen size - consider devices under 768px width as mobile
+                const isSmallScreen = window.innerWidth < 768;
+
+                // Combine criteria - mobile if small screen OR (mobile user agent AND touch)
+                const isMobile = isSmallScreen || (isMobileUA && hasTouch);                
+                return isMobile;
+            }
+
             setupResizeDetection() {
                 window.addEventListener('resize', () => {
+                    // Re-detect mobile on resize (orientation change)
+                    this.isMobile = this.detectMobile();
                     this.onResize();
                 });
             }
@@ -863,7 +884,16 @@
                 this.centerX = boardWidth / 2;
                 this.centerY = boardHeight / 2;
                 
-                console.log('🎯 Board dimensions:', {boardWidth, boardHeight});
+                // Use different board layouts based on device type
+                if (this.isMobile) {
+                    this.initializeMobileBoard(boardWidth, boardHeight);
+                } else {
+                    this.initializeDesktopBoard(boardWidth, boardHeight);
+                }
+            }
+
+            initializeDesktopBoard(boardWidth, boardHeight) {
+                console.log('🖥️ Initializing desktop circular board');
                 
                 // Calculate dynamic scaling factor based on available space
                 // Use the smaller dimension to ensure proper aspect ratio for circular board
@@ -871,8 +901,6 @@
                 const baseSize = smallerDim; // Use pure smaller dimension for precise geometry
                 const referenceSize = 800; // Reference board size
                 const scaleFactor = Math.max(0.7, Math.min(2.0, baseSize / referenceSize));
-                
-                console.log('🎯 Scale factor:', scaleFactor, 'based on smaller dimension:', baseSize, {boardWidth, boardHeight});
                 
                 // Apply scaling to board dimensions for better spacing
                 const scaledCenterOffset = GAME_CONFIG.board_scaling.center_offset * scaleFactor * 1.0; // Reduced multiplier
@@ -895,13 +923,69 @@
                 const ringRadii = GAME_CONFIG.board_scaling.ring_radius_ratios.map(ratio => 
                     scaledMaxRadius * ratio
                 );
-                console.log('🎯 Ring radii:', ringRadii);
                 ringRadii.forEach((radius, ringIndex) => {
                     this.createRing(radius, ringIndex + 1, scaledNodeSize);
                 });
 
                 // Create connecting strands with scaled dimensions
                 this.createStrands(scaleFactor, scaledMaxRadius);
+            }
+
+            initializeMobileBoard(boardWidth, boardHeight) {
+                console.log('📱 Initializing mobile rectangular board');
+                
+                // MOBILE RECTANGULAR BOARD LAYOUT
+                // Instead of concentric circles that waste space on mobile, we use concentric rectangles
+                // that fill the available screen space much more efficiently. The game logic remains
+                // identical - we just change the visual positioning of the same node IDs.
+                
+                // Calculate scaling factor based on available space for rectangular layout
+                const referenceSize = 600; // Reference board size for mobile
+                const scaleFactor = Math.max(0.5, Math.min(1.5, Math.min(boardWidth, boardHeight) / referenceSize));
+                const scaledNodeSize = Math.max(18, Math.min(40, GAME_CONFIG.board_scaling.node_size * scaleFactor));
+                
+                // Create rectangular grid layout that fills available space efficiently
+                // We'll create 3 concentric rectangles + center nodes
+                
+                // Calculate margins and spacing to avoid UI element overlap
+                // Account for hamburger menu (top-left), chat bubbles (top-right), and other UI elements
+                const topMargin = 100 * scaleFactor; // Extra space for hamburger menu and chat
+                const sideMargin = 80 * scaleFactor; // Extra space for chat bubbles and UI elements
+                const bottomMargin = 60 * scaleFactor; // Space for bottom UI elements
+                
+                const usableWidth = boardWidth - (2 * sideMargin);
+                const usableHeight = boardHeight - topMargin - bottomMargin;
+                
+                // Adjust center position to account for asymmetric margins
+                const adjustedCenterX = this.centerX;
+                const adjustedCenterY = this.centerY + (topMargin - bottomMargin) / 2;
+                
+                // Create center nodes (4 nodes in a small rectangle)
+                const centerSpacing = 25 * scaleFactor;
+                const centerPositions = [
+                    {x: adjustedCenterX - centerSpacing, y: adjustedCenterY - centerSpacing},
+                    {x: adjustedCenterX + centerSpacing, y: adjustedCenterY - centerSpacing},
+                    {x: adjustedCenterX - centerSpacing, y: adjustedCenterY + centerSpacing},
+                    {x: adjustedCenterX + centerSpacing, y: adjustedCenterY + centerSpacing}
+                ];
+
+                centerPositions.forEach((pos, index) => {
+                    this.createNode(pos.x, pos.y, `C${index}`, 'center', scaledNodeSize);
+                });
+
+                // Create 3 rectangular "rings" that use the available space
+                const rectangularRings = [
+                    { width: usableWidth * 0.4, height: usableHeight * 0.4 },
+                    { width: usableWidth * 0.7, height: usableHeight * 0.7 },
+                    { width: usableWidth * 0.95, height: usableHeight * 0.95 }
+                ];
+
+                rectangularRings.forEach((rect, ringIndex) => {
+                    this.createRectangularRing(rect.width, rect.height, ringIndex + 1, scaledNodeSize, adjustedCenterX, adjustedCenterY);
+                });
+
+                // Create connecting strands for rectangular layout
+                this.createRectangularStrands(scaleFactor);
             }
 
             createNode(x, y, id, type, nodeSize) {
@@ -942,6 +1026,41 @@
                     const angle = (i * 2 * Math.PI) / nodesPerRing;
                     const x = this.centerX + radius * Math.cos(angle);
                     const y = this.centerY + radius * Math.sin(angle);
+                    const id = `R${ringIndex}N${i}`;
+                    this.createNode(x, y, id, `ring${ringIndex}`, nodeSize);
+                }
+            }
+
+            createRectangularRing(width, height, ringIndex, nodeSize, centerX = this.centerX, centerY = this.centerY) {
+                const nodesPerRing = 16; // Keep same number of nodes for compatibility
+                
+                // Distribute 16 nodes around rectangle perimeter starting from pure right (like desktop)
+                // N0 starts at right side, then clockwise: N1=bottom-right, N2=bottom, N3=bottom-left, etc.
+                const perimeter = 2 * (width + height);
+                const nodeSpacing = perimeter / nodesPerRing;
+                
+                for (let i = 0; i < nodesPerRing; i++) {
+                    const distanceAlongPerimeter = i * nodeSpacing;
+                    let x, y;
+                    
+                    if (distanceAlongPerimeter <= height) {
+                        // Right side (top to bottom) - N0 starts here
+                        x = centerX + width/2;
+                        y = centerY - height/2 + distanceAlongPerimeter;
+                    } else if (distanceAlongPerimeter <= height + width) {
+                        // Bottom side (right to left)
+                        x = centerX + width/2 - (distanceAlongPerimeter - height);
+                        y = centerY + height/2;
+                    } else if (distanceAlongPerimeter <= height + width + height) {
+                        // Left side (bottom to top)
+                        x = centerX - width/2;
+                        y = centerY + height/2 - (distanceAlongPerimeter - height - width);
+                    } else {
+                        // Top side (left to right)
+                        x = centerX - width/2 + (distanceAlongPerimeter - height - width - height);
+                        y = centerY - height/2;
+                    }
+                    
                     const id = `R${ringIndex}N${i}`;
                     this.createNode(x, y, id, `ring${ringIndex}`, nodeSize);
                 }
@@ -1025,6 +1144,109 @@
                 path.setAttribute('d', pathData);
                 path.setAttribute('stroke', '#333');
                 path.setAttribute('stroke-width', Math.max(1, Math.min(3, 2 * scaleFactor)) + 'px'); // Apply scaled stroke width
+                path.setAttribute('fill', 'none');
+                path.setAttribute('stroke-linecap', 'round');
+                path.setAttribute('stroke-linejoin', 'round');
+                
+                svg.appendChild(path);
+            }
+
+            createRectangularStrands(scaleFactor) {
+                // Create rectangular ring strands
+                this.createRectangularRingStrands(scaleFactor);
+                
+                // Create connecting strands between rectangular rings and center
+                this.createRectangularNodeConnections(scaleFactor);
+            }
+
+            createRectangularRingStrands(scaleFactor) {
+                // Create SVG for rectangular ring strands
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('width', this.board.offsetWidth);
+                svg.setAttribute('height', this.board.offsetHeight);
+                svg.style.position = 'absolute';
+                svg.style.top = '0';
+                svg.style.left = '0';
+                svg.style.zIndex = '4'; // Behind the connecting strands
+                this.board.appendChild(svg);
+
+                // Calculate margins for rectangular rings (same as mobile board)
+                const boardWidth = this.board.offsetWidth;
+                const boardHeight = this.board.offsetHeight;
+                const topMargin = 100 * scaleFactor;
+                const sideMargin = 80 * scaleFactor;
+                const bottomMargin = 60 * scaleFactor;
+                
+                const usableWidth = boardWidth - (2 * sideMargin);
+                const usableHeight = boardHeight - topMargin - bottomMargin;
+                
+                // Adjust center position to match mobile board positioning
+                const adjustedCenterX = this.centerX;
+                const adjustedCenterY = this.centerY + (topMargin - bottomMargin) / 2;
+
+                // Draw 3 rectangular rings
+                const rectangularRings = [
+                    { width: usableWidth * 0.4, height: usableHeight * 0.4 },
+                    { width: usableWidth * 0.7, height: usableHeight * 0.7 },
+                    { width: usableWidth * 0.95, height: usableHeight * 0.95 }
+                ];
+
+                rectangularRings.forEach((rect, index) => {
+                    const rectangle = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rectangle.setAttribute('x', adjustedCenterX - rect.width/2);
+                    rectangle.setAttribute('y', adjustedCenterY - rect.height/2);
+                    rectangle.setAttribute('width', rect.width);
+                    rectangle.setAttribute('height', rect.height);
+                    rectangle.setAttribute('fill', 'none');
+                    rectangle.setAttribute('stroke', '#333');
+                    rectangle.setAttribute('stroke-width', Math.max(1, Math.min(3, 2 * scaleFactor)));
+                    rectangle.setAttribute('opacity', '0.8');
+                    svg.appendChild(rectangle);
+                });
+            }
+
+            createRectangularNodeConnections(scaleFactor) {
+                // Create SVG for connecting strands between rectangular rings and center
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('width', this.board.offsetWidth);
+                svg.setAttribute('height', this.board.offsetHeight);
+                svg.style.position = 'absolute';
+                svg.style.top = '0';
+                svg.style.left = '0';
+                svg.style.zIndex = '5';
+                this.board.appendChild(svg);
+
+                // Create equivalent connections for rectangular layout
+                // These need to map to the same node IDs as the circular layout for game compatibility
+                GAME_CONFIG.strand_definitions.forEach(strandDef => {
+                    this.createRectangularStrand(svg, strandDef.nodes, strandDef.direction, scaleFactor);
+                });
+            }
+
+            createRectangularStrand(svg, nodeIds, direction, scaleFactor) {
+                const nodes = nodeIds.map(id => this.nodes.find(n => n.id === id)).filter(n => n);
+                
+                if (nodes.length < 2) return;
+
+                // Create path through node centers (same as circular version)
+                let pathData = '';
+                
+                nodes.forEach((node, index) => {
+                    const x = node.x;
+                    const y = node.y;
+                    
+                    if (index === 0) {
+                        pathData += `M ${x} ${y}`;
+                    } else {
+                        // Use straight lines for connection
+                        pathData += ` L ${x} ${y}`;
+                    }
+                });
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathData);
+                path.setAttribute('stroke', '#333');
+                path.setAttribute('stroke-width', Math.max(1, Math.min(3, 2 * scaleFactor)) + 'px');
                 path.setAttribute('fill', 'none');
                 path.setAttribute('stroke-linecap', 'round');
                 path.setAttribute('stroke-linejoin', 'round');

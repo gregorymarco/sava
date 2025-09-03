@@ -981,10 +981,23 @@ body {
         max-width: none;
         height: 80vh;
         margin: 0;
+        padding: 1rem; /* Optimized padding for mobile rectangular layout */
     }
     
     .game-board-container {
         padding: 0.5rem;
+    }
+    
+    /* Mobile rectangular board optimizations */
+    .game-board .node {
+        touch-action: manipulation; /* Better touch handling on mobile */
+        -webkit-tap-highlight-color: transparent; /* Remove iOS tap highlight */
+    }
+    
+    /* Ensure rectangular board fills space efficiently on mobile */
+    .game-board svg {
+        max-width: 100%;
+        max-height: 100%;
     }
 }
 
