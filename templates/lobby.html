@@ -851,8 +851,6 @@
                             setTimeout(() => {
                                 this.restoreGameStateAfterResize();
                             }, 100); // Small delay to ensure DOM is ready
-                        } else {
-                            console.log('ℹ️ No game state to restore (game not started yet)');
                         }
                     }
                 } catch (error) {
@@ -893,8 +891,6 @@
             }
 
             initializeDesktopBoard(boardWidth, boardHeight) {
-                console.log('🖥️ Initializing desktop circular board');
-                
                 // Calculate dynamic scaling factor based on available space
                 // Use the smaller dimension to ensure proper aspect ratio for circular board
                 const smallerDim = Math.min(boardWidth, boardHeight);

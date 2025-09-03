@@ -17,42 +17,50 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        .container {
+            background: transparent;
+            border-radius: 0;
+            padding: 0;
+            box-shadow: none;
+            text-align: center;
+            max-width: none;
+            width: 100%;
+            height: 100vh;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
         }
 
-        .container {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            padding: 3rem;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            max-width: 600px;
-            width: 90%;
-        }
-
         .logo {
-            font-size: 4rem;
+            font-size: 5rem;
             margin-bottom: 1rem;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
         }
 
         h1 {
-            color: #333;
+            color: white;
             margin-bottom: 1rem;
             font-size: 2.5rem;
             font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         .subtitle {
-            color: #666;
+            color: rgba(255, 255, 255, 0.9);
             margin-bottom: 3rem;
             font-size: 1.2rem;
             line-height: 1.6;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .description {
@@ -99,16 +107,13 @@
     </style>
 </head>
 <body>
+    {% include 'nav_sidebar_component.html' %}
+
     <div class="container">
         <div class="logo">♔♛</div>
         <h1>Sava</h1>
         <p class="subtitle">A game of strategy, chance, and treachery</p>
-
-        <div class="button-container">
-            <a href="/rules" class="btn secondary">📖 Rules</a>
-            <a href="/lobbies" class="btn secondary">🎯 Browse Lobbies</a>
-            <a href="/game" class="btn">🎮 Play Game</a>
-        </div>
     </div>
+
 </body>
 </html> 
