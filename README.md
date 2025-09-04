@@ -2,6 +2,8 @@
 
 A turn-based chess-like web game built with Flask and HTMX.
 
+Visit it live in a free render container! sava.onrender.com
+
 ## Setup
 
 1. Install dependencies:
@@ -41,7 +43,3 @@ Next steps:
 - **Frontend**: HTML5, CSS3, JavaScript
 - **Dynamic Updates**: HTMX
 - **Styling**: Custom CSS
-
-## AI use disclosure
-
-Much of this codebase was written by AI using claude-4-sonnet! 
