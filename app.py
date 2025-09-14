@@ -435,13 +435,13 @@ def notify_lobby_update(lobby_id, event_type, data=None):
         socketio.emit('lobby_update', notification, room=lobby_id)
 
 class Lobby:
-    def __init__(self, lobby_id):
+    def __init__(self, lobby_id, time_limit=None):
         self.lobby_id = lobby_id
         self.players = []
         self.spectators = []
         self.created_at = datetime.now()
         # Turn timer configuration (in seconds)
-        self.turn_time_limit = TURN_TIME_LIMIT
+        self.turn_time_limit = time_limit if time_limit is not None else TURN_TIME_LIMIT
         
         self.game_state = {
             'board': {},
@@ -1710,14 +1710,24 @@ def rules():
 def lobby_list():
     return render_template('lobby_list.html')
 
+@app.route('/timeselect')
+def timeselect():
+    return render_template('timeselect.html')
+
 @app.route('/game')
 def game():
-    return redirect(url_for('create_lobby'))
+    return redirect(url_for('timeselect'))
 
 @app.route('/create-lobby')
 def create_lobby():
     lobby_id = str(uuid.uuid4())[:8]  # Short lobby ID
-    lobbies[lobby_id] = Lobby(lobby_id)
+    time_limit = request.args.get('time_limit', TURN_TIME_LIMIT)
+    try:
+        time_limit = int(time_limit)
+    except (ValueError, TypeError):
+        time_limit = TURN_TIME_LIMIT
+    
+    lobbies[lobby_id] = Lobby(lobby_id, time_limit)
     return redirect(url_for('join_lobby', lobby_id=lobby_id))
 
 @app.route('/lobby/<lobby_id>')

@@ -17,7 +17,7 @@
     <div class="sidebar-buttons">
         <a href="/rules" class="sidebar-btn secondary">📖 Rules</a>
         <a href="/lobbies" class="sidebar-btn secondary">🎯 Browse Lobbies</a>
-        <a href="/game" class="sidebar-btn">🎮 Play Game</a>
+        <a href="/timeselect" class="sidebar-btn">🎮 Play Game</a>
     </div>
 </div>
 
@@ -173,8 +173,8 @@
 
     // Open sidebar by default when page loads (on landing page, rules page, and lobby list)
     document.addEventListener('DOMContentLoaded', function() {
-        // Auto-open on landing page, rules page, or lobby list
-        if (window.location.pathname === '/' || window.location.pathname === '' || window.location.pathname === '/rules' || window.location.pathname === '/lobbies') {
+        // Auto-open on landing page, rules page, lobby list, or time select
+        if (window.location.pathname === '/' || window.location.pathname === '' || window.location.pathname === '/rules' || window.location.pathname === '/lobbies' || window.location.pathname === '/timeselect') {
             setTimeout(function() {
                 toggleSidebar();
             }, 100);

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sava - Choose Game Time</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧝🏿‍♀️</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        .container {
+            background: transparent;
+            border-radius: 0;
+            padding: 0;
+            box-shadow: none;
+            text-align: center;
+            max-width: none;
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem 0;
+        }
+
+        .time-select-header {
+            margin-bottom: 3rem;
+        }
+
+        .logo {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+        }
+
+        h1 {
+            color: white;
+            margin-bottom: 1rem;
+            font-size: 2.5rem;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 0;
+            font-size: 1.2rem;
+            line-height: 1.6;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .time-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            max-width: 800px;
+            width: 100%;
+            padding: 0 1rem;
+        }
+
+        .time-option {
+            background: rgba(255, 255, 255, 0.95);
+            border: none;
+            border-radius: 20px;
+            padding: 2rem 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .time-option:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+            background: white;
+        }
+
+        .time-option:active {
+            transform: translateY(-2px);
+        }
+
+        .time-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .time-label {
+            font-size: 1rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .time-description {
+            font-size: 0.9rem;
+            color: #888;
+            margin-top: 0.5rem;
+            line-height: 1.4;
+        }
+
+        .quick-play {
+            margin-top: 3rem;
+            padding: 1rem 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            color: white;
+            text-decoration: none;
+            font-size: 1.1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+
+        .quick-play:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem 0;
+            }
+
+            .time-select-header {
+                margin-bottom: 2rem;
+            }
+
+            .time-options {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+                padding: 0 0.5rem;
+            }
+
+            .time-option {
+                padding: 1.5rem 1rem;
+            }
+
+            .time-value {
+                font-size: 1.5rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .logo {
+                font-size: 3rem;
+            }
+
+            .quick-play {
+                margin-top: 2rem;
+                padding: 0.8rem 1.5rem;
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    {% include 'nav_sidebar_component.html' %}
+
+    <div class="container">
+        <div class="time-select-header">
+            <div class="logo">♔♛</div>
+            <h1>Choose Game Time</h1>
+            <p class="subtitle">Select how long each player has per game</p>
+        </div>
+
+        <div class="time-options">
+            <a href="/create-lobby?time_limit=180" class="time-option">
+                <div class="time-value">3 min</div>
+                <div class="time-label">Quick Games</div>
+                <div class="time-description">Fast-paced matches for experienced players</div>
+            </a>
+
+            <a href="/create-lobby?time_limit=300" class="time-option">
+                <div class="time-value">5 min</div>
+                <div class="time-label">Standard Games</div>
+                <div class="time-description">Quick gameplay with some time to think</div>
+            </a>
+
+            <a href="/create-lobby?time_limit=600" class="time-option">
+                <div class="time-value">10 min</div>
+                <div class="time-label">Strategic Games</div>
+                <div class="time-description">Time pressure and time for deep strategy</div>
+            </a>
+
+            <a href="/create-lobby?time_limit=900" class="time-option">
+                <div class="time-value">15 min</div>
+                <div class="time-label">Long Games</div>
+                <div class="time-description">Relaxed pace for careful planning</div>
+            </a>
+
+            <a href="/create-lobby?time_limit=1800" class="time-option">
+                <div class="time-value">30 min</div>
+                <div class="time-label">Epic Games</div>
+                <div class="time-description">Maximum time for complex strategies</div>
+            </a>
+
+            <a href="/create-lobby?time_limit=18000" class="time-option">
+                <div class="time-value">300 mins</div>
+                <div class="time-label">Unlimited Games</div>
+                <div class="time-description">No time pressure. Casual games with time for breaks.</div>
+            </a>
+        </div>
+
+        <a href="/create-lobby" class="quick-play">
+            🎮 Quick Play (Default Time)
+        </a>
+    </div>
+</body>
+</html>
