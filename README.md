@@ -6,6 +6,9 @@ Visit it live in a free render container! sava.onrender.com
 
 ## Setup
 
+## Dev Setup
+>>>>>>> Stashed changes
+
 1. Install dependencies:
 ```bash
 pip install -r requirements.txt
@@ -13,7 +16,24 @@ pip install -r requirements.txt
 
 2. Run the server:
 ```bash
-python app.py
+python3 app.py
+```
+
+3. Open your browser and navigate to:
+```
+http://localhost:5000
+```
+
+## Production Setup
+
+1. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+2. Run the server:
+```bash
+./start_production.sh
 ```
 
 3. Open your browser and navigate to:
@@ -27,9 +47,6 @@ http://localhost:5000
 - 🎉 Prototype! A fully legal game technically can be played over the board, with a few small bugs. Testing is underway...
 
 ## TODOs
-
-Most important:
-- UI facelift with appropriate assets
 
 Next steps:
 - Matchmaking
