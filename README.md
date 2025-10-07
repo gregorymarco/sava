@@ -7,8 +7,6 @@ Visit it live in a free render container! sava.onrender.com
 ## Setup
 
 ## Dev Setup
->>>>>>> Stashed changes
-
 1. Install dependencies:
 ```bash
 pip install -r requirements.txt
